@@ -41,7 +41,10 @@ THIRD_PARTY_APPS = [
     "pgvector.django",
 ]
 
-LOCAL_APPS = []
+LOCAL_APPS = [
+    "shared_app.apps.SharedAppConfig",
+    "accounts.apps.AccountsConfig",
+]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -153,3 +156,5 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
 ]
+
+AUTH_USER_MODEL = "accounts.User"

@@ -18,6 +18,7 @@ yarn.lock
 dist/
 build/
 .next/
+package-lock.json
 
 # IDE
 .idea/

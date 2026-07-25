@@ -1,6 +1,6 @@
 from django.db import models
 
-class Role(models.TextChoices):
+class OrganizationRole(models.TextChoices):
     ADMIN = "admin", "Admin"
     MANAGER = "manager", "Manager"
     DEVELOPER = "developer", "Developer"

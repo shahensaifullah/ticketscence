@@ -1,16 +1,28 @@
+import uuid
+
 from django.db import models
 from django.utils import timezone
 
 
 class SoftDeleteQuerySet(models.QuerySet):
+    def soft_delete(self):
+        now = timezone.now()
+        return self.update(
+            deleted_at=now,
+            updated_at=now,
+        )
+
     def delete(self):
-        return self.update(deleted_at=timezone.now())
+        return self.soft_delete()
 
     def hard_delete(self):
         return super().delete()
 
     def restore(self):
-        return self.update(deleted_at=None)
+        return self.update(
+            deleted_at=None,
+            updated_at=timezone.now(),
+        )
 
     def active(self):
         return self.filter(deleted_at__isnull=True)
@@ -19,7 +31,7 @@ class SoftDeleteQuerySet(models.QuerySet):
         return self.filter(deleted_at__isnull=False)
 
 
-class SoftDeleteManager(models.Manager):
+class SoftDeleteManager(models.Manager.from_queryset(SoftDeleteQuerySet)):
     def get_queryset(self):
         return SoftDeleteQuerySet(
             self.model,
@@ -27,7 +39,7 @@ class SoftDeleteManager(models.Manager):
         ).filter(deleted_at__isnull=True)
 
 
-class AllObjectsManager(models.Manager):
+class AllObjectsManager(models.Manager.from_queryset(SoftDeleteQuerySet)):
     def get_queryset(self):
         return SoftDeleteQuerySet(
             self.model,
@@ -36,6 +48,11 @@ class AllObjectsManager(models.Manager):
 
 
 class BaseModel(models.Model):
+    uid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        blank=True
+    )
     created_at = models.DateTimeField(
         auto_now_add=True,
         db_index=True,
@@ -63,6 +80,9 @@ class BaseModel(models.Model):
         return self.deleted_at is not None
 
     def delete(self, using=None, keep_parents=False):
+        return self.soft_delete(using=using)
+
+    def soft_delete(self, using=None):
         self.deleted_at = timezone.now()
         self.save(
             using=using,

@@ -1,6 +1,8 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 
+from organizations.models import Organization, OrganizationMember
+
 User = get_user_model()
 
 
@@ -9,10 +11,17 @@ class Command(BaseCommand):
 
     DEFAULT_PASSWORD = "12345"
 
+
+    organizations = [
+        {
+            "name": "saif",
+        }
+    ]
+    organization_name = "Bongo"
+
     USERS = [
         {
-            "username": "superadmin",
-            "email": "superadmin@ticketsense.local",
+            "email": "saif@saif.com",
             "first_name": "Super",
             "last_name": "Admin",
             "role": "admin",
@@ -20,7 +29,6 @@ class Command(BaseCommand):
             "is_staff": True,
         },
         {
-            "username": "admin",
             "email": "admin@ticketsense.local",
             "first_name": "System",
             "last_name": "Admin",
@@ -28,42 +36,36 @@ class Command(BaseCommand):
             "is_staff": True,
         },
         {
-            "username": "manager",
             "email": "manager@ticketsense.local",
             "first_name": "Project",
             "last_name": "Manager",
             "role": "manager",
         },
         {
-            "username": "developer1",
             "email": "developer1@ticketsense.local",
             "first_name": "John",
             "last_name": "Developer",
             "role": "developer",
         },
         {
-            "username": "developer2",
             "email": "developer2@ticketsense.local",
             "first_name": "Jane",
             "last_name": "Developer",
             "role": "developer",
         },
         {
-            "username": "qa",
             "email": "qa@ticketsense.local",
             "first_name": "QA",
             "last_name": "Engineer",
             "role": "qa",
         },
         {
-            "username": "support",
             "email": "support@ticketsense.local",
             "first_name": "Support",
             "last_name": "Agent",
             "role": "support_agent",
         },
         {
-            "username": "reporter",
             "email": "reporter@ticketsense.local",
             "first_name": "End",
             "last_name": "User",
@@ -87,6 +89,7 @@ class Command(BaseCommand):
 
             is_superuser = data.pop("is_superuser", False)
             is_staff = data.pop("is_staff", False)
+            role = data.pop("role", False)
 
             user = User.objects.create_user(
                 **data,
@@ -96,6 +99,15 @@ class Command(BaseCommand):
             user.is_staff = is_staff
             user.is_superuser = is_superuser
             user.save()
+
+            org, _ = Organization.objects.get_or_create(
+                name=self.organization_name
+            )
+            OrganizationMember.objects.create(
+                user=user,
+                organization=org,
+                role=role,
+            )
 
             self.stdout.write(
                 self.style.SUCCESS(

@@ -1,12 +1,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ensureSession } from "@/lib/api";
 import { AppHeader } from "./app-header";
 import { AppSidebar } from "./app-sidebar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    ensureSession()
+      .then(() => {
+        if (active) {
+          setSessionReady(true);
+        }
+      })
+      .catch(() => {
+        window.location.replace("/login");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -18,6 +38,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  if (!sessionReady) {
+    return (
+      <div
+        className="fixed inset-0 grid place-items-center bg-[var(--surface)] text-sm text-[var(--on-surface-variant)]"
+        role="status"
+      >
+        Restoring your session…
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 flex overflow-hidden bg-[var(--surface)] text-[var(--on-surface)]">

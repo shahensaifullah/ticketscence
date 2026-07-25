@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, LogOut, Plus, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { TicketMark } from "../icons";
+import { LogoutButton } from "../logout-button";
 import {
   primaryNavigation,
   secondaryNavigation,
@@ -107,15 +108,14 @@ export function AppSidebar({
                 onNavigate={onCloseMobile}
               />
             ))}
-            <Link
+            <LogoutButton
               className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm text-[var(--on-surface-variant)] transition hover:bg-[var(--surface-container-high)] hover:text-[var(--on-surface)]"
-              href="/login"
               onClick={onCloseMobile}
               title={collapsed ? "Log out" : undefined}
             >
               <LogOut aria-hidden="true" className="shrink-0" size={18} />
               <span className={collapsed ? "md:hidden" : ""}>Log out</span>
-            </Link>
+            </LogoutButton>
           </div>
         </nav>
 

@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { LogoutButton } from "../logout-button";
 import { Breadcrumbs } from "./breadcrumbs";
 
 type Theme = "dark" | "light";
@@ -331,7 +332,10 @@ function ProfileMenu() {
       <MenuLink href="/settings" icon={User} label="Your profile" />
       <MenuLink href="/settings" icon={Settings} label="Settings" />
       <div className="my-1 border-t border-[var(--outline-variant)]" />
-      <MenuLink href="/login" icon={LogOut} label="Log out" />
+      <LogoutButton className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-high)] hover:text-[var(--on-surface)]">
+        <LogOut aria-hidden="true" size={15} />
+        Log out
+      </LogoutButton>
     </div>
   );
 }

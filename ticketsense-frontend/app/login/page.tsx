@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { GoogleIcon, TicketMark } from "../components/icons";
+import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -38,55 +39,7 @@ export default function LoginPage() {
             </span>
           </div>
 
-          <form action="/dashboard" className="space-y-5">
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium">Email address</span>
-              <span className="relative block">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--outline)]">✉</span>
-                <input
-                  className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] py-3 pl-11 pr-4 text-sm text-[var(--on-surface)] outline-none placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20"
-                  defaultValue="alex@acme.com"
-                  name="email"
-                  required
-                  type="email"
-                />
-              </span>
-            </label>
-
-            <label className="block">
-              <span className="mb-2 flex items-center justify-between text-sm font-medium">
-                Password
-                <Link className="text-xs font-semibold text-[var(--primary)] hover:underline" href="/forgot-password">
-                  Forgot password?
-                </Link>
-              </span>
-              <span className="relative block">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--outline)]">▣</span>
-                <input
-                  className="w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] py-3 pl-11 pr-4 text-sm text-[var(--on-surface)] outline-none placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20"
-                  defaultValue="ticketsense"
-                  minLength={8}
-                  name="password"
-                  required
-                  type="password"
-                />
-              </span>
-            </label>
-
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <label className="flex items-center gap-2 text-xs text-[var(--on-surface-variant)]">
-                <input className="size-4 accent-[var(--primary-container)]" defaultChecked name="remember" type="checkbox" />
-                Keep me logged in
-              </label>
-              <span className="flex items-center gap-2 font-mono text-[9px] text-[var(--success)]">
-                ◉ AI security shielding is active
-              </span>
-            </div>
-
-            <button className="flex w-full items-center justify-center gap-3 rounded-xl bg-[var(--primary-container)] px-5 py-3.5 text-sm font-bold text-white transition hover:bg-[var(--primary-hover)] active:scale-[0.99]" type="submit">
-              Sign in <span>→</span>
-            </button>
-          </form>
+          <LoginForm />
 
           <div className="my-6 flex items-center gap-3">
             <span className="h-px flex-1 bg-[var(--outline-variant)]" />

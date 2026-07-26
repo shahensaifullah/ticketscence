@@ -2,12 +2,40 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ??
+  "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
     default: "TicketSense",
     template: "%s · TicketSense",
   },
   description: "AI-powered ticket intelligence for modern support teams.",
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "TicketSense",
+    title: "TicketSense — Turn support noise into clear action",
+    description:
+      "AI-powered triage, multi-workspace management, and operational clarity for modern support teams.",
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "TicketSense turns support noise into clear action",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TicketSense — Turn support noise into clear action",
+    description:
+      "AI-powered triage, multi-workspace management, and operational clarity for modern support teams.",
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({

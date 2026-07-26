@@ -113,7 +113,7 @@ api.interceptors.response.use(
 export type RegisterPayload = {
   first_name: string;
   last_name: string;
-  organization_name: string;
+  workspace_name: string;
   email: string;
   password: string;
 };
@@ -122,6 +122,66 @@ export type LoginPayload = {
   email: string;
   password: string;
   remember: boolean;
+};
+
+export type WorkspaceRole =
+  | "owner"
+  | "admin"
+  | "manager"
+  | "developer"
+  | "support_agent"
+  | "reporter";
+
+export type WorkspaceUser = {
+  uid: string;
+  name: string;
+  email: string;
+  workspace_count: number;
+};
+
+export type WorkspaceSummary = {
+  uid: string;
+  name: string;
+  slug: string;
+  role: WorkspaceRole;
+  role_label: string;
+  is_current: boolean;
+  member_count: number;
+};
+
+export type WorkspaceMember = {
+  uid: string;
+  user_uid: string;
+  name: string;
+  email: string;
+  role: WorkspaceRole;
+  role_label: string;
+};
+
+export type WorkspaceListResponse = {
+  user: WorkspaceUser;
+  workspaces: WorkspaceSummary[];
+};
+
+export type WorkspaceDashboard = {
+  user: WorkspaceUser;
+  workspace: WorkspaceSummary & {
+    can_manage_members: boolean;
+    can_manage_workspace_settings: boolean;
+  };
+  members: WorkspaceMember[];
+  available_roles: Array<{
+    value: WorkspaceRole;
+    label: string;
+  }>;
+};
+
+export type CreateMemberPayload = {
+  first_name: string;
+  last_name: string;
+  email: string;
+  password: string;
+  role: WorkspaceRole;
 };
 
 export async function registerUser(payload: RegisterPayload) {
@@ -141,4 +201,60 @@ export async function logoutUser() {
   } finally {
     setAccessToken(null);
   }
+}
+
+export async function getWorkspaces() {
+  const response = await api.get<WorkspaceListResponse>(
+    "/api/workspaces/",
+  );
+  return response.data;
+}
+
+export async function createWorkspace(name: string) {
+  const response = await api.post<WorkspaceSummary>(
+    "/api/workspaces/",
+    { name },
+  );
+  return response.data;
+}
+
+export async function updateWorkspace(slug: string, name: string) {
+  const response = await api.patch<WorkspaceSummary>(
+    `/api/workspaces/${encodeURIComponent(slug)}`,
+    { name },
+  );
+  return response.data;
+}
+
+export async function deleteWorkspace(slug: string) {
+  await api.delete(`/api/workspaces/${encodeURIComponent(slug)}`);
+}
+
+export async function activateWorkspace(slug: string) {
+  const response = await api.post<WorkspaceSummary>(
+    `/api/workspaces/${encodeURIComponent(slug)}/activate`,
+  );
+  return response.data;
+}
+
+export async function getWorkspaceDashboard(slug: string) {
+  const response = await api.get<WorkspaceDashboard>(
+    `/api/workspaces/${encodeURIComponent(slug)}/dashboard`,
+  );
+  return response.data;
+}
+
+export async function createWorkspaceMember(
+  slug: string,
+  payload: CreateMemberPayload,
+) {
+  const response = await api.post<{
+    member: WorkspaceMember;
+    created_user: boolean;
+    email_sent: boolean;
+  }>(
+    `/api/workspaces/${encodeURIComponent(slug)}/members`,
+    payload,
+  );
+  return response.data;
 }

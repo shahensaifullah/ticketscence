@@ -11,6 +11,18 @@ export type Ticket = {
   created: string;
   dueDate?: string;
   labels: string[];
+  originTopic?: {
+    uid: string;
+    title: string;
+    topicType: string;
+    status: string;
+  };
+  externalLinks?: Array<{
+    uid: string;
+    provider: string;
+    url: string;
+    label: string;
+  }>;
 };
 
 export const TICKET_STORAGE_KEY = "ticketsense.custom-tickets";

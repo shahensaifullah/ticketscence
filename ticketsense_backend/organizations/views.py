@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 MANAGEMENT_ROLES = {
     WorkspaceRole.OWNER,
     WorkspaceRole.ADMIN,
-    WorkspaceRole.MANAGER,
 }
 
 
@@ -224,7 +223,7 @@ class WorkspaceMemberCreateView(APIView):
         )
         if actor_membership.role not in MANAGEMENT_ROLES:
             raise PermissionDenied(
-                "Only Owners, Admins, and Managers can add workspace members."
+                "Only Owners and Admins can add workspace members."
             )
 
         serializer = MemberCreateSerializer(

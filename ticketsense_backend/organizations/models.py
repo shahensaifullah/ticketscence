@@ -27,7 +27,7 @@ class WorkspaceMember(BaseModel):
     role = models.CharField(
         max_length=30,
         choices=WorkspaceRole.choices,
-        default=WorkspaceRole.REPORTER,
+        default=WorkspaceRole.MEMBER,
     )
 
     is_active = models.BooleanField(default=True)

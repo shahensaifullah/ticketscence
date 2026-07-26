@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { AlertTriangle, Trash2, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useWorkspaces } from "@/app/components/workspace-provider";
+import { deleteTicket, getTicket } from "@/lib/api";
 import { readCustomTickets, seedTickets, type Ticket } from "@/lib/ticket-data";
 
 const priorityStyles: Record<Ticket["priority"], string> = {
@@ -21,21 +25,104 @@ const statusStyles: Record<Ticket["status"], string> = {
 };
 
 export function TicketDetail({ id }: { id: string }) {
+  const router = useRouter();
+  const { selectedWorkspace } = useWorkspaces();
   const [ticket, setTicket] = useState<Ticket | null | undefined>(() =>
     seedTickets.find((item) => item.id === id),
   );
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string>();
 
   useEffect(() => {
-    const hydrationTimer = window.setTimeout(() => {
-      setTicket(
-        seedTickets.find((item) => item.id === id) ??
-          readCustomTickets().find((item) => item.id === id) ??
-          null,
-      );
-    }, 0);
+    if (!selectedWorkspace) return;
+    let active = true;
+    getTicket(selectedWorkspace.slug, id)
+      .then((data) => {
+        if (!active) return;
+        setTicket({
+          id: data.reference,
+          title: data.title,
+          description: data.description,
+          project: data.project_name ?? "No project",
+          type: "Task",
+          priority: data.priority
+            ? ((data.priority[0].toUpperCase() +
+                data.priority.slice(1)) as Ticket["priority"])
+            : "Medium",
+          status:
+            data.status === "in_progress"
+              ? "In Progress"
+              : data.status === "in_review"
+                ? "Review"
+                : data.status === "completed"
+                  ? "Resolved"
+                  : ((data.status[0].toUpperCase() +
+                      data.status.slice(1)) as Ticket["status"]),
+          assignee: "Unassigned",
+          initials: "—",
+          created: new Intl.DateTimeFormat("en", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }).format(new Date(data.created_at)),
+          labels: [],
+          originTopic: data.origin_topic
+            ? {
+                uid: data.origin_topic.uid,
+                title: data.origin_topic.title,
+                topicType: data.origin_topic.topic_type,
+                status: data.origin_topic.status,
+              }
+            : undefined,
+          externalLinks: data.external_links,
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setTicket(
+          seedTickets.find((item) => item.id === id) ??
+            readCustomTickets().find((item) => item.id === id) ??
+            null,
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, selectedWorkspace]);
 
-    return () => window.clearTimeout(hydrationTimer);
-  }, [id]);
+  const canDelete =
+    selectedWorkspace?.role === "owner" ||
+    selectedWorkspace?.role === "admin";
+  const deleteConfirmationTarget =
+    ticket?.originTopic?.title ?? ticket?.id ?? "";
+
+  async function handleDelete() {
+    if (
+      !selectedWorkspace ||
+      !ticket ||
+      deleteConfirmation !== deleteConfirmationTarget
+    ) {
+      return;
+    }
+    setIsDeleting(true);
+    setDeleteError(undefined);
+    try {
+      await deleteTicket(
+        selectedWorkspace.slug,
+        ticket.id,
+        deleteConfirmation,
+      );
+      router.replace("/board");
+      router.refresh();
+    } catch {
+      setDeleteError(
+        "Unable to delete this Ticket. Check the confirmation and your role.",
+      );
+      setIsDeleting(false);
+    }
+  }
 
   if (ticket === undefined) {
     return <div className="flex-1 bg-[var(--surface)]" />;
@@ -50,8 +137,8 @@ export function TicketDetail({ id }: { id: string }) {
           <p className="mt-2 text-sm leading-6 text-[var(--on-surface-variant)]">
             It may have been removed, or the ticket link may be incorrect.
           </p>
-          <Link className="mt-6 inline-block rounded-lg bg-[var(--primary-container)] px-5 py-3 text-sm font-semibold text-white" href="/tickets">
-            Return to all tickets
+          <Link className="mt-6 inline-block rounded-lg bg-[var(--primary-container)] px-5 py-3 text-sm font-semibold text-white" href="/board">
+            Return to board
           </Link>
         </div>
       </div>
@@ -64,7 +151,7 @@ export function TicketDetail({ id }: { id: string }) {
         <div className="mx-auto max-w-4xl">
           <div className="mb-6">
             <div className="mb-3 flex flex-wrap items-center gap-3">
-              <Link className="font-mono text-xs font-semibold text-[var(--primary)] hover:underline" href="/tickets">
+              <Link className="font-mono text-xs font-semibold text-[var(--primary)] hover:underline" href="/board">
                 {ticket.id}
               </Link>
               <span className="text-[var(--outline-variant)]">•</span>
@@ -90,6 +177,48 @@ export function TicketDetail({ id }: { id: string }) {
             </div>
             <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--on-surface-variant)]">{ticket.description}</p>
           </section>
+
+          {ticket.originTopic ? (
+            <Link
+              className="mb-6 block rounded-xl border border-[var(--primary)]/30 bg-[var(--primary)]/5 p-5 transition hover:bg-[var(--primary)]/10"
+              href={`/topics/${ticket.originTopic.uid}`}
+            >
+              <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--primary)]">
+                Origin Topic
+              </span>
+              <strong className="mt-2 block text-sm">
+                {ticket.originTopic.title}
+              </strong>
+              <span className="mt-1 block text-xs capitalize text-[var(--on-surface-variant)]">
+                {ticket.originTopic.topicType.replaceAll("_", " ")} ·{" "}
+                {ticket.originTopic.status.replaceAll("_", " ")}
+              </span>
+            </Link>
+          ) : null}
+
+          {ticket.externalLinks?.length ? (
+            <section className="mb-6 rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-5">
+              <h2 className="mb-3 text-sm font-semibold">
+                Code &amp; project links
+              </h2>
+              <div className="space-y-2">
+                {ticket.externalLinks.map((item) => (
+                  <a
+                    className="flex items-center justify-between rounded-lg border border-[var(--outline-variant)] px-3 py-2 text-sm hover:bg-[var(--surface-container-high)]"
+                    href={item.url}
+                    key={item.uid}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <span>{item.label || item.url}</span>
+                    <span className="ml-3 text-[10px] uppercase text-[var(--outline)]">
+                      {item.provider.replaceAll("_", " ")}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section className="mb-6 rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-5">
             <h2 className="mb-4 flex items-center gap-3 text-lg font-semibold">
@@ -185,7 +314,111 @@ export function TicketDetail({ id }: { id: string }) {
             </select>
           </label>
         </SidebarSection>
+
+        {canDelete ? (
+          <SidebarSection title="DANGER ZONE">
+            <p className="text-xs leading-5 text-[var(--on-surface-variant)]">
+              Ticket deletion is permanent in the interface and is only
+              available from this detail page.
+            </p>
+            <button
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--error)]/50 px-4 py-2.5 text-xs font-semibold text-[var(--error)] hover:bg-[var(--error)]/10"
+              onClick={() => {
+                setDeleteConfirmation("");
+                setDeleteError(undefined);
+                setShowDelete(true);
+              }}
+              type="button"
+            >
+              <Trash2 size={14} />
+              Delete Ticket
+            </button>
+          </SidebarSection>
+        ) : null}
       </aside>
+
+      {showDelete ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target && !isDeleting) {
+              setShowDelete(false);
+            }
+          }}
+        >
+          <section
+            aria-labelledby="delete-ticket-title"
+            aria-modal="true"
+            className="w-full max-w-lg rounded-xl border border-[var(--error)]/40 bg-[var(--surface-container-lowest)] p-6 shadow-2xl"
+            role="dialog"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex gap-3">
+                <span className="mt-0.5 text-[var(--error)]">
+                  <AlertTriangle size={20} />
+                </span>
+                <div>
+                  <h2
+                    className="text-lg font-semibold"
+                    id="delete-ticket-title"
+                  >
+                    Delete {ticket.id}
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-[var(--on-surface-variant)]">
+                    This removes the Ticket from the board. Its Origin
+                    Topic will remain available.
+                  </p>
+                </div>
+              </div>
+              <button
+                aria-label="Close"
+                className="rounded-lg p-2 hover:bg-[var(--surface-container)]"
+                disabled={isDeleting}
+                onClick={() => setShowDelete(false)}
+                type="button"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <label className="mt-5 block text-xs font-semibold">
+              Type{" "}
+              <strong className="break-all text-[var(--error)]">
+                {deleteConfirmationTarget}
+              </strong>{" "}
+              to confirm
+              <input
+                autoComplete="off"
+                autoFocus
+                className="mt-2 h-11 w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-3 text-sm outline-none focus:border-[var(--error)]"
+                onChange={(event) =>
+                  setDeleteConfirmation(event.target.value)
+                }
+                value={deleteConfirmation}
+              />
+            </label>
+
+            {deleteError ? (
+              <p className="mt-3 text-xs text-[var(--error)]" role="alert">
+                {deleteError}
+              </p>
+            ) : null}
+
+            <button
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--error)] px-4 py-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={
+                isDeleting ||
+                deleteConfirmation !== deleteConfirmationTarget
+              }
+              onClick={() => void handleDelete()}
+              type="button"
+            >
+              <Trash2 size={14} />
+              {isDeleting ? "Deleting…" : "Delete this Ticket"}
+            </button>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

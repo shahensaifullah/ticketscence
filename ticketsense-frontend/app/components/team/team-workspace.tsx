@@ -52,7 +52,7 @@ const initialValues: CreateMemberPayload = {
   last_name: "",
   email: "",
   password: "",
-  role: "reporter",
+  role: "member",
 };
 
 function getMessage(value: unknown): string | undefined {
@@ -200,10 +200,7 @@ export function TeamWorkspace() {
 
   const roles =
     dashboard?.available_roles.filter(
-      (role) =>
-        role.value !== "owner" &&
-        (dashboard.workspace.role !== "manager" ||
-          role.value !== "admin"),
+      (role) => role.value !== "owner",
     ) ?? [];
 
   return (
@@ -226,7 +223,7 @@ export function TeamWorkspace() {
               </button>
             ) : undefined
           }
-          description="Manage workspace access and role assignments. Owners, Admins, and Managers can add members."
+          description="Manage workspace access and role assignments. Owners and Admins can add members."
           eyebrow={
             dashboard
               ? `${dashboard.workspace.name} · ${dashboard.workspace.member_count} members`

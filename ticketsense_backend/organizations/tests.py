@@ -41,12 +41,12 @@ class WorkspaceApiTests(APITestCase):
         WorkspaceMember.objects.create(
             workspace=self.workspace,
             user=self.manager,
-            role=WorkspaceRole.MANAGER,
+            role=WorkspaceRole.MEMBER,
         )
         WorkspaceMember.objects.create(
             workspace=self.workspace,
             user=self.developer,
-            role=WorkspaceRole.DEVELOPER,
+            role=WorkspaceRole.GUEST,
         )
 
     def authenticate(self, user):
@@ -86,7 +86,7 @@ class WorkspaceApiTests(APITestCase):
         second_membership = WorkspaceMember.objects.create(
             workspace=second_workspace,
             user=self.admin,
-            role=WorkspaceRole.MANAGER,
+            role=WorkspaceRole.MEMBER,
         )
         self.authenticate(self.admin)
 
@@ -137,10 +137,10 @@ class WorkspaceApiTests(APITestCase):
             self.member_url(),
             {
                 "first_name": "New",
-                "last_name": "Reporter",
+                "last_name": "Member",
                 "email": "new@example.com",
                 "password": "Strong-pass-123!",
-                "role": WorkspaceRole.REPORTER,
+                "role": WorkspaceRole.MEMBER,
             },
             format="json",
         )
@@ -152,7 +152,7 @@ class WorkspaceApiTests(APITestCase):
             WorkspaceMember.objects.filter(
                 workspace=self.workspace,
                 user__email="new@example.com",
-                role=WorkspaceRole.REPORTER,
+                role=WorkspaceRole.MEMBER,
             ).exists()
         )
         self.assertEqual(len(mail.outbox), 1)
@@ -172,7 +172,7 @@ class WorkspaceApiTests(APITestCase):
                 "last_name": "Name",
                 "email": existing.email,
                 "password": "Different-pass-123!",
-                "role": WorkspaceRole.SUPPORT_AGENT,
+                "role": WorkspaceRole.GUEST,
             },
             format="json",
         )
@@ -183,7 +183,7 @@ class WorkspaceApiTests(APITestCase):
         self.assertFalse(response.data["created_user"])
         self.assertIn("existing TicketSense password", mail.outbox[0].body)
 
-    def test_manager_cannot_assign_admin_role(self):
+    def test_member_cannot_add_members(self):
         self.authenticate(self.manager)
 
         response = self.client.post(
@@ -198,10 +198,9 @@ class WorkspaceApiTests(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("role", response.data)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_non_manager_cannot_add_members(self):
+    def test_guest_cannot_add_members(self):
         self.authenticate(self.developer)
 
         response = self.client.post(
@@ -211,7 +210,7 @@ class WorkspaceApiTests(APITestCase):
                 "last_name": "Member",
                 "email": "blocked@example.com",
                 "password": "Strong-pass-123!",
-                "role": WorkspaceRole.REPORTER,
+                "role": WorkspaceRole.MEMBER,
             },
             format="json",
         )

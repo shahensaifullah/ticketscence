@@ -99,20 +99,6 @@ class MemberCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError(list(error.messages)) from error
         return value
 
-    def validate(self, attrs):
-        if attrs["role"] == WorkspaceRole.OWNER:
-            raise serializers.ValidationError(
-                {"role": "The Owner role cannot be assigned to a member."}
-            )
-        if (
-            self.context["actor_role"] == WorkspaceRole.MANAGER
-            and attrs["role"] == WorkspaceRole.ADMIN
-        ):
-            raise serializers.ValidationError(
-                {"role": "Managers cannot assign the Admin role."}
-            )
-        return attrs
-
     @transaction.atomic
     def create(self, validated_data):
         workspace = self.context["workspace"]

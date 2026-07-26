@@ -1,16 +1,6 @@
-import type { Metadata } from "next";
-import { ProductShell } from "@/app/components/product-shell";
-import { TicketList } from "@/app/components/tickets/ticket-list";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Tickets",
-  description: "Search, filter, and manage all support tickets.",
-};
 
 export default function TicketsPage() {
-  return (
-    <ProductShell activeSide="issues" activeTop="tickets">
-      <TicketList />
-    </ProductShell>
-  );
+  redirect("/board");
 }

@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 const segmentLabels: Record<string, string> = {
   dashboard: "Dashboard",
   "my-work": "My Work",
+  topics: "Topics",
   tickets: "Tickets",
   new: "Create issue",
   board: "Board",

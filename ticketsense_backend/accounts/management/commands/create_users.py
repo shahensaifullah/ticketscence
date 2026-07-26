@@ -23,7 +23,7 @@ class Command(BaseCommand):
             "email": "admin@admin.com",
             "first_name": "Saifullah",
             "last_name": "Shahen",
-            "role": "admin",
+            "role": "owner",
             "is_superuser": True,
             "is_staff": True,
             "workspace": ["bongo", "amazon"]
@@ -40,49 +40,49 @@ class Command(BaseCommand):
             "email": "manager@bongo.local",
             "first_name": "Project",
             "last_name": "Manager",
-            "role": "manager",
+            "role": "member",
             "workspace": ["bongo"]
         },
         {
             "email": "developer1@bongo.local",
             "first_name": "John",
             "last_name": "Developer",
-            "role": "developer",
+            "role": "member",
             "workspace": ["bongo"]
         },
         {
             "email": "developer2@bongo.local",
             "first_name": "Jane",
             "last_name": "Developer",
-            "role": "developer",
+            "role": "member",
             "workspace": ["bongo"]
         },
         {
             "email": "qa@amazon.local",
             "first_name": "QA",
             "last_name": "Engineer",
-            "role": "qa",
+            "role": "member",
             "workspace": ["amazon"]
         },
         {
             "email": "support@bongo.local",
             "first_name": "Support",
             "last_name": "Agent",
-            "role": "support_agent",
+            "role": "member",
             "workspace": ["bongo"]
         },
         {
             "email": "reporter@amazon.local",
             "first_name": "End",
             "last_name": "User",
-            "role": "reporter",
+            "role": "guest",
             "workspace": ["amazon"]
         },
         {
             "email": "reporter@bongo.local",
             "first_name": "End",
             "last_name": "User",
-            "role": "reporter",
+            "role": "guest",
             "workspace": ["bongo"]
         },
     ]
@@ -104,7 +104,7 @@ class Command(BaseCommand):
             is_superuser = data.pop("is_superuser", False)
             is_staff = data.pop("is_staff", False)
             role = data.pop("role", False)
-            workspace_names = data.pop("workspace", "dhaka")
+            workspace_names = data.pop("workspace")
 
             user = User.objects.create_user(
                 **data,

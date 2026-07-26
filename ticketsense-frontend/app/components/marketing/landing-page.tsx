@@ -45,9 +45,9 @@ const features = [
   },
   {
     icon: ShieldCheck,
-    title: "Roles that match the work",
+    title: "Universal workspace access",
     description:
-      "Give Admins, Managers, Developers, Support Agents, and Reporters the right access.",
+      "Control workspace access with Owner, Admin, Member, and Guest roles.",
     accent: "warning",
   },
   {
@@ -88,11 +88,10 @@ const workflow = [
 ];
 
 const roles = [
+  "Owner",
   "Admin",
-  "Manager",
-  "Developer",
-  "Support Agent",
-  "Reporter",
+  "Member",
+  "Guest",
 ];
 
 export function LandingPage() {
@@ -339,12 +338,12 @@ export function LandingPage() {
               <WorkspaceRow
                 members="14 members"
                 name="Northstar Labs"
-                role="Manager"
+                role="Member"
               />
               <WorkspaceRow
                 members="8 members"
                 name="Orbit Support"
-                role="Developer"
+                role="Guest"
               />
               <Link
                 className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 px-4 py-4 text-sm text-slate-400"

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ensureSession } from "@/lib/api";
+import { WorkspaceProvider } from "../workspace-provider";
 import { AppHeader } from "./app-header";
 import { AppSidebar } from "./app-sidebar";
 
@@ -51,17 +52,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="fixed inset-0 flex overflow-hidden bg-[var(--surface)] text-[var(--on-surface)]">
-      <AppSidebar
-        collapsed={collapsed}
-        mobileOpen={mobileOpen}
-        onCloseMobile={() => setMobileOpen(false)}
-        onToggleCollapsed={() => setCollapsed((value) => !value)}
-      />
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <AppHeader onOpenMobile={() => setMobileOpen(true)} />
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
-      </main>
-    </div>
+    <WorkspaceProvider>
+      <div className="fixed inset-0 flex overflow-hidden bg-[var(--surface)] text-[var(--on-surface)]">
+        <AppSidebar
+          collapsed={collapsed}
+          mobileOpen={mobileOpen}
+          onCloseMobile={() => setMobileOpen(false)}
+          onToggleCollapsed={() => setCollapsed((value) => !value)}
+        />
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <AppHeader onOpenMobile={() => setMobileOpen(true)} />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {children}
+          </div>
+        </main>
+      </div>
+    </WorkspaceProvider>
   );
 }

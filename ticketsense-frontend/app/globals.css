@@ -283,6 +283,67 @@ a {
   padding: var(--page-padding);
 }
 
+.marketing-page {
+  position: relative;
+  width: calc(100% + var(--page-padding) + var(--page-padding));
+  min-height: 100vh;
+  margin: calc(var(--page-padding) * -1);
+}
+
+.marketing-grid {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, black 10%, transparent 86%);
+}
+
+.marketing-gradient-text {
+  background: linear-gradient(115deg, #8bb8ff 10%, #d8e7ff 48%, #6ed8ff 92%);
+  background-clip: text;
+  color: transparent;
+}
+
+.marketing-feature-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+
+.marketing-feature-primary {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(96, 165, 250, 0.16);
+  color: #93c5fd;
+}
+
+.marketing-feature-tertiary {
+  background: rgba(34, 211, 238, 0.08);
+  border-color: rgba(103, 232, 249, 0.14);
+  color: #67e8f9;
+}
+
+.marketing-feature-success {
+  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(110, 231, 183, 0.14);
+  color: #6ee7b7;
+}
+
+.marketing-feature-warning {
+  background: rgba(251, 191, 36, 0.08);
+  border-color: rgba(252, 211, 77, 0.14);
+  color: #fcd34d;
+}
+
+.marketing-cta {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(125, 211, 252, 0.2), transparent 42%),
+    linear-gradient(135deg, #123a99, #1d4ed8 50%, #075985);
+  box-shadow: 0 32px 90px rgba(29, 78, 216, 0.24);
+}
+
 /* Shared content canvas inside the globally padded root. */
 .page-shell {
   width: 100%;

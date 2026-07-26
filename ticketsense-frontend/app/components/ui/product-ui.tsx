@@ -7,7 +7,7 @@ import {
 import type {
   WorkspacePriority,
   WorkspaceTicketStatus,
-} from "../../mocks/product-data";
+} from "@/app/mocks/product-data";
 
 export function PageHeader({
   actions,

@@ -77,11 +77,11 @@ export function AppSidebar({
             className={`flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--primary-container)] px-3 text-sm font-semibold text-[var(--on-primary-container)] shadow-sm transition hover:brightness-110 active:scale-[0.98] ${
               collapsed ? "md:px-0" : ""
             }`}
-            href="/tickets/new"
+            href="/topics"
             onClick={onCloseMobile}
           >
             <Plus aria-hidden="true" size={18} />
-            <span className={collapsed ? "md:hidden" : ""}>Create ticket</span>
+            <span className={collapsed ? "md:hidden" : ""}>New Topic</span>
           </Link>
         </div>
 

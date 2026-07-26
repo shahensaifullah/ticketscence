@@ -11,10 +11,12 @@ venv/
 db.sqlite3
 staticfiles/
 media/
+.model-cache/
 
 # Node
 node_modules/
 yarn.lock
+!ticketsense-frontend/yarn.lock
 dist/
 build/
 .next/

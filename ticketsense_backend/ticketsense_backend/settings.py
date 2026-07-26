@@ -11,6 +11,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR.parent / ".env")
 
+
+def env_list(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return [
+        item.strip().rstrip("/")
+        for item in value.split(",")
+        if item.strip()
+    ]
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
@@ -18,7 +30,7 @@ load_dotenv(BASE_DIR.parent / ".env")
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = ['*']
 
@@ -31,6 +43,7 @@ DJANGO_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.postgres',
 ]
 
 THIRD_PARTY_APPS = [
@@ -47,6 +60,9 @@ LOCAL_APPS = [
     "shared_app.apps.SharedAppConfig",
     "accounts.apps.AccountsConfig",
     'organizations.apps.OrganizationsConfig',
+    "projects.apps.ProjectsConfig",
+    "topics.apps.TopicsConfig",
+    "tickets.apps.TicketsConfig",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -97,6 +113,42 @@ DATABASES = {
         "PORT": os.getenv("POSTGRES_PORT", "5432"),
     }
 }
+
+TOPIC_EMBEDDING_ENABLED = (
+    os.getenv("TOPIC_EMBEDDING_ENABLED", "True").lower() == "true"
+)
+TOPIC_EMBEDDING_MODEL = os.getenv(
+    "TOPIC_EMBEDDING_MODEL",
+    "BAAI/bge-small-en-v1.5",
+)
+TOPIC_EMBEDDING_CACHE_DIR = os.getenv(
+    "TOPIC_EMBEDDING_CACHE_DIR",
+    str(BASE_DIR.parent / ".model-cache" / "fastembed"),
+)
+TOPIC_EMBEDDING_THREADS = int(
+    os.getenv("TOPIC_EMBEDDING_THREADS", "2")
+)
+# This must match Topic.embedding and its database migration.
+TOPIC_EMBEDDING_DIMENSIONS = 384
+TOPIC_SIMILARITY_THRESHOLD = float(
+    os.getenv("TOPIC_SIMILARITY_THRESHOLD", "0.70")
+)
+
+CELERY_BROKER_URL = os.getenv(
+    "CELERY_BROKER_URL",
+    "redis://localhost:6379/0",
+)
+CELERY_RESULT_BACKEND = os.getenv(
+    "CELERY_RESULT_BACKEND",
+    "redis://localhost:6379/0",
+)
+CELERY_TASK_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 120
+CELERY_TASK_SOFT_TIME_LIMIT = 90
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
 
 # Password validation
@@ -156,12 +208,21 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+CORS_ALLOWED_ORIGINS = env_list(
+    "CORS_ALLOWED_ORIGINS",
+    [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://0.0.0.0:3000",
+    ],
+)
 
 CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = env_list(
+    "CSRF_TRUSTED_ORIGINS",
+    CORS_ALLOWED_ORIGINS,
+)
 
 AUTH_USER_MODEL = "accounts.User"
 APPEND_SLASH = False
@@ -172,3 +233,18 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
 }
+
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    "TicketSense <no-reply@ticketsense.local>",
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")

@@ -6,8 +6,8 @@ import {
   FolderKanban,
   Gauge,
   ListChecks,
+  MessageSquareText,
   Settings,
-  TicketCheck,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -24,10 +24,9 @@ export const primaryNavigation: NavigationItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: Gauge },
   { label: "My Work", href: "/my-work", icon: ListChecks },
   {
-    label: "Tickets",
-    href: "/tickets",
-    icon: TicketCheck,
-    match: ["/tickets", "/tickets/new"],
+    label: "Topics",
+    href: "/topics",
+    icon: MessageSquareText,
   },
   { label: "Board", href: "/board", icon: Columns3 },
   { label: "Projects", href: "/projects", icon: FolderKanban },

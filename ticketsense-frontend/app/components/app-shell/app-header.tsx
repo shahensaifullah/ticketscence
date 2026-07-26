@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { LogoutButton } from "../logout-button";
+import { useWorkspaces } from "../workspace-provider";
 import { Breadcrumbs } from "./breadcrumbs";
 
 type Theme = "dark" | "light";
@@ -28,6 +29,15 @@ type AppHeaderProps = {
 };
 
 export function AppHeader({ onOpenMobile }: AppHeaderProps) {
+  const {
+    error: workspaceError,
+    isLoading: workspacesLoading,
+    isSwitching: workspaceSwitching,
+    workspaces,
+    selectedWorkspace,
+    selectWorkspace,
+    user,
+  } = useWorkspaces();
   const [theme, setTheme] = useState<Theme>("dark");
   const [searchOpen, setSearchOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -100,30 +110,35 @@ export function AppHeader({ onOpenMobile }: AppHeaderProps) {
           <Menu aria-hidden="true" size={20} />
         </button>
 
-        <div className="hidden min-w-0 items-center gap-2 xl:flex">
-          <Selector
-            icon={Building2}
-            label="Organization"
-            options={["Acme Corp", "Northstar Labs"]}
-            value="Acme Corp"
+        <div className="flex min-w-0 items-center gap-2">
+          <WorkspaceSelector
+            disabled={workspacesLoading || workspaceSwitching}
+            error={workspaceError}
+            onChange={selectWorkspace}
+            options={workspaces}
+            value={selectedWorkspace?.slug}
           />
-          <Selector
-            icon={FolderKanban}
-            label="Project"
-            options={["All projects", "Core Platform", "AI Operations", "Customer Experience"]}
-            value="All projects"
-          />
+          <span className="hidden xl:block">
+            <Selector
+              icon={FolderKanban}
+              label="Project"
+              options={["All projects", "Core Platform", "AI Operations", "Customer Experience"]}
+              value="All projects"
+            />
+          </span>
         </div>
 
         <button
           aria-expanded={searchOpen}
           aria-label="Open global search"
-          className="mx-auto flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 text-left text-sm text-[var(--outline)] transition hover:border-[var(--outline)] sm:max-w-md"
+          className="mx-auto flex size-10 min-w-0 flex-none items-center justify-center gap-2 rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 text-left text-sm text-[var(--outline)] transition hover:border-[var(--outline)] sm:h-10 sm:w-auto sm:max-w-md sm:flex-1 sm:justify-start"
           onClick={() => setSearchOpen(true)}
           type="button"
         >
           <Search aria-hidden="true" className="shrink-0" size={17} />
-          <span className="truncate">Search tickets, projects, or people…</span>
+          <span className="hidden truncate sm:inline">
+            Search tickets, projects, or people…
+          </span>
           <span className="ml-auto hidden items-center gap-1 rounded border border-[var(--outline-variant)] px-1.5 py-0.5 font-mono text-[9px] sm:flex">
             <Command aria-hidden="true" size={10} /> K
           </span>
@@ -180,17 +195,24 @@ export function AppHeader({ onOpenMobile }: AppHeaderProps) {
             type="button"
           >
             <span className="grid size-7 place-items-center rounded-full bg-[var(--secondary-container)] text-[10px] font-bold text-[var(--on-secondary-container)]">
-              AM
+              {getInitials(user?.name)}
             </span>
             <span className="hidden min-w-0 lg:block">
               <strong className="block max-w-28 truncate text-xs text-[var(--on-surface)]">
-                Alex Morgan
+                {user?.name ?? "Loading…"}
               </strong>
-              <span className="block text-[10px] text-[var(--outline)]">Administrator</span>
+              <span className="block text-[10px] text-[var(--outline)]">
+                {selectedWorkspace?.role_label ?? "Member"}
+              </span>
             </span>
             <ChevronDown aria-hidden="true" className="hidden text-[var(--outline)] lg:block" size={14} />
           </button>
-          {profileOpen && <ProfileMenu />}
+          {profileOpen && (
+            <ProfileMenu
+              workspaceName={selectedWorkspace?.name}
+              userEmail={user?.email}
+            />
+          )}
         </div>
       </div>
 
@@ -231,6 +253,74 @@ export function AppHeader({ onOpenMobile }: AppHeaderProps) {
         </div>
       )}
     </header>
+  );
+}
+
+function getInitials(name?: string) {
+  if (!name) {
+    return "TS";
+  }
+
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function WorkspaceSelector({
+  disabled,
+  error,
+  onChange,
+  options,
+  value,
+}: {
+  disabled: boolean;
+  error?: string;
+  onChange: (slug: string) => Promise<void>;
+  options: Array<{ name: string; slug: string }>;
+  value?: string;
+}) {
+  return (
+    <label className="flex h-10 min-w-0 max-w-32 items-center gap-2 rounded-lg px-2 text-left transition hover:bg-[var(--surface-container-high)] sm:max-w-48">
+      <Building2
+        aria-hidden="true"
+        className="shrink-0 text-[var(--outline)]"
+        size={16}
+      />
+      <span className="min-w-0">
+        <span className="block font-mono text-[8px] uppercase tracking-wider text-[var(--outline)]">
+          Workspace
+        </span>
+        <select
+          aria-label="Workspace"
+          className="block max-w-36 cursor-pointer appearance-none truncate bg-transparent pr-4 text-xs font-medium text-[var(--on-surface)] outline-none"
+          disabled={disabled || options.length === 0}
+          onChange={(event) => {
+            void onChange(event.target.value);
+          }}
+          title={error}
+          value={value ?? ""}
+        >
+          {options.length === 0 ? (
+            <option value="">
+              {disabled ? "Loading…" : "No workspaces"}
+            </option>
+          ) : null}
+          {options.map((option) => (
+            <option key={option.slug} value={option.slug}>
+              {option.name}
+            </option>
+          ))}
+        </select>
+      </span>
+      <ChevronDown
+        aria-hidden="true"
+        className="-ml-5 shrink-0 text-[var(--outline)]"
+        size={13}
+      />
+    </label>
   );
 }
 
@@ -322,12 +412,24 @@ function NotificationItem({
   );
 }
 
-function ProfileMenu() {
+function ProfileMenu({
+  workspaceName,
+  userEmail,
+}: {
+  workspaceName?: string;
+  userEmail?: string;
+}) {
   return (
     <div className="absolute right-0 top-12 w-56 rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container)] p-2 shadow-2xl">
       <div className="border-b border-[var(--outline-variant)] px-3 py-2">
-        <strong className="block text-xs text-[var(--on-surface)]">alex@acme.com</strong>
-        <span className="text-[10px] text-[var(--outline)]">Acme Corp workspace</span>
+        <strong className="block truncate text-xs text-[var(--on-surface)]">
+          {userEmail ?? "Loading…"}
+        </strong>
+        <span className="block truncate text-[10px] text-[var(--outline)]">
+          {workspaceName
+            ? `${workspaceName} workspace`
+            : "No workspace selected"}
+        </span>
       </div>
       <MenuLink href="/settings" icon={User} label="Your profile" />
       <MenuLink href="/settings" icon={Settings} label="Settings" />

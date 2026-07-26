@@ -1,0 +1,128 @@
+name: ticketsense_app
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.2-pg16-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ticketsense}
+      POSTGRES_USER: ${POSTGRES_USER:-ticketsense}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ticketsense-development-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.2-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./ticketsense_backend
+    environment: &backend-environment
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-docker-development-secret-change-me}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://0.0.0.0:3000}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://0.0.0.0:3000}
+      POSTGRES_DB: ${POSTGRES_DB:-ticketsense}
+      POSTGRES_USER: ${POSTGRES_USER:-ticketsense}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ticketsense-development-password}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      TOPIC_EMBEDDING_ENABLED: ${TOPIC_EMBEDDING_ENABLED:-True}
+      TOPIC_EMBEDDING_MODEL: ${TOPIC_EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}
+      TOPIC_EMBEDDING_CACHE_DIR: /app/.model-cache/fastembed
+      TOPIC_EMBEDDING_THREADS: ${TOPIC_EMBEDDING_THREADS:-2}
+      TOPIC_SIMILARITY_THRESHOLD: ${TOPIC_SIMILARITY_THRESHOLD:-0.70}
+      EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
+      FRONTEND_URL: http://localhost:3000
+    command:
+      [
+        "sh",
+        "-c",
+        "python manage.py migrate && python manage.py runserver 0.0.0.0:8000",
+      ]
+    volumes:
+      - media_data:/app/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; socket.create_connection(('127.0.0.1', 8000), 2).close()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./ticketsense_backend
+    environment: *backend-environment
+    command:
+      [
+        "celery",
+        "-A",
+        "ticketsense_backend",
+        "worker",
+        "--pool=solo",
+        "--loglevel=info",
+      ]
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./ticketsense-frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_data:

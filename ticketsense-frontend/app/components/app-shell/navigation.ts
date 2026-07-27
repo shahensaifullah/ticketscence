@@ -28,7 +28,12 @@ export const primaryNavigation: NavigationItem[] = [
     href: "/topics",
     icon: MessageSquareText,
   },
-  { label: "Board", href: "/board", icon: Columns3 },
+  {
+    label: "Tickets",
+    href: "/board",
+    icon: Columns3,
+    match: ["/board", "/tickets"],
+  },
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "AI Assistant", href: "/assistant", icon: Bot },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },

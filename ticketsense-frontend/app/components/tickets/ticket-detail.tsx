@@ -1,347 +1,595 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Trash2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  Clock3,
+  Play,
+  Square,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWorkspaces } from "@/app/components/workspace-provider";
-import { deleteTicket, getTicket } from "@/lib/api";
-import { readCustomTickets, seedTickets, type Ticket } from "@/lib/ticket-data";
+import { timerChangedEvent } from "@/app/components/tickets/global-timer-widget";
+import {
+  deleteTicket,
+  getTicket,
+  getWorkspaceDashboard,
+  startTicketTimer,
+  stopTicketTimer,
+  updateBoardTicket,
+  type TicketDetailResponse,
+  type TopicTicket,
+} from "@/lib/api";
 
-const priorityStyles: Record<Ticket["priority"], string> = {
-  Critical: "border-[var(--error)]/30 bg-[var(--error-container)]/20 text-[var(--error)]",
-  High: "border-[var(--primary)]/30 bg-[var(--primary-container)]/20 text-[var(--primary)]",
-  Medium: "border-[var(--tertiary)]/30 bg-[var(--tertiary-container)]/20 text-[var(--tertiary)]",
-  Low: "border-[var(--outline)]/30 bg-[var(--surface-container-highest)]/30 text-[var(--on-surface-variant)]",
+const statusLabels: Record<TopicTicket["status"], string> = {
+  backlog: "Backlog",
+  open: "Open",
+  in_progress: "In progress",
+  in_review: "In review",
+  completed: "Completed",
+  closed: "Closed",
 };
 
-const statusStyles: Record<Ticket["status"], string> = {
-  Open: "border-[var(--error)]/30 bg-[var(--error-container)]/20 text-[var(--error)]",
-  "In Progress": "border-[var(--primary)]/30 bg-[var(--primary-container)]/20 text-[var(--primary)]",
-  Review: "border-[var(--tertiary)]/30 bg-[var(--tertiary-container)]/20 text-[var(--tertiary)]",
-  Backlog: "border-[var(--outline)]/30 bg-[var(--surface-container-highest)]/30 text-[var(--on-surface-variant)]",
-  Resolved: "border-[var(--success)]/30 bg-[var(--success)]/10 text-[var(--success)]",
-  Closed: "border-[var(--outline)]/30 bg-[var(--surface-container-high)] text-[var(--on-surface-variant)]",
-};
+function formatDuration(totalSeconds: number) {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = seconds % 60;
+  return `${hours.toString().padStart(2, "0")}:${minutes
+    .toString()
+    .padStart(2, "0")}:${remainder.toString().padStart(2, "0")}`;
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return "Running";
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
 
 export function TicketDetail({ id }: { id: string }) {
   const router = useRouter();
   const { selectedWorkspace } = useWorkspaces();
-  const [ticket, setTicket] = useState<Ticket | null | undefined>(() =>
-    seedTickets.find((item) => item.id === id),
-  );
+  const [ticket, setTicket] = useState<
+    TicketDetailResponse | null | undefined
+  >();
+  const [currentUserUid, setCurrentUserUid] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [estimateMinutes, setEstimateMinutes] = useState("");
+  const [now, setNow] = useState(() => Date.now());
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string>();
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string>();
+
+  const loadTicket = useCallback(async () => {
+    if (!selectedWorkspace) return;
+    const data = await getTicket(selectedWorkspace.slug, id);
+    setTicket(data);
+    setDueDate(data.due_date ?? "");
+    setEstimateMinutes(data.estimated_minutes.toString());
+  }, [id, selectedWorkspace]);
 
   useEffect(() => {
     if (!selectedWorkspace) return;
     let active = true;
-    getTicket(selectedWorkspace.slug, id)
-      .then((data) => {
+    Promise.all([
+      getTicket(selectedWorkspace.slug, id),
+      getWorkspaceDashboard(selectedWorkspace.slug),
+    ])
+      .then(([ticketData, dashboard]) => {
         if (!active) return;
-        setTicket({
-          id: data.reference,
-          title: data.title,
-          description: data.description,
-          project: data.project_name ?? "No project",
-          type: "Task",
-          priority: data.priority
-            ? ((data.priority[0].toUpperCase() +
-                data.priority.slice(1)) as Ticket["priority"])
-            : "Medium",
-          status:
-            data.status === "in_progress"
-              ? "In Progress"
-              : data.status === "in_review"
-                ? "Review"
-                : data.status === "completed"
-                  ? "Resolved"
-                  : ((data.status[0].toUpperCase() +
-                      data.status.slice(1)) as Ticket["status"]),
-          assignee: "Unassigned",
-          initials: "—",
-          created: new Intl.DateTimeFormat("en", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          }).format(new Date(data.created_at)),
-          labels: [],
-          originTopic: data.origin_topic
-            ? {
-                uid: data.origin_topic.uid,
-                title: data.origin_topic.title,
-                topicType: data.origin_topic.topic_type,
-                status: data.origin_topic.status,
-              }
-            : undefined,
-          externalLinks: data.external_links,
-        });
+        setTicket(ticketData);
+        setDueDate(ticketData.due_date ?? "");
+        setEstimateMinutes(ticketData.estimated_minutes.toString());
+        setCurrentUserUid(dashboard.user.uid);
       })
       .catch(() => {
-        if (!active) return;
-        setTicket(
-          seedTickets.find((item) => item.id === id) ??
-            readCustomTickets().find((item) => item.id === id) ??
-            null,
-        );
+        if (active) setTicket(null);
       });
     return () => {
       active = false;
     };
   }, [id, selectedWorkspace]);
 
-  const canDelete =
+  const activeTimer = ticket?.active_timer;
+  const timerOwner =
+    Boolean(activeTimer) && activeTimer?.user_uid === currentUserUid;
+  const canManageAnyTimer =
     selectedWorkspace?.role === "owner" ||
     selectedWorkspace?.role === "admin";
-  const deleteConfirmationTarget =
-    ticket?.originTopic?.title ?? ticket?.id ?? "";
+  const canTrack = selectedWorkspace?.role !== "guest";
+
+  useEffect(() => {
+    if (!activeTimer) return;
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [activeTimer]);
+
+  useEffect(() => {
+    const handleTimerChange = () => void loadTicket();
+    window.addEventListener(timerChangedEvent, handleTimerChange);
+    return () =>
+      window.removeEventListener(timerChangedEvent, handleTimerChange);
+  }, [loadTicket]);
+
+  const liveTimerSeconds = useMemo(() => {
+    if (!activeTimer) return 0;
+    return Math.max(
+      activeTimer.progress_seconds,
+      Math.floor(
+        (now - new Date(activeTimer.started_at).getTime()) / 1000,
+      ),
+    );
+  }, [activeTimer, now]);
+
+  const totalTrackedSeconds = ticket
+    ? ticket.total_tracked_seconds -
+      (activeTimer?.elapsed_seconds ?? 0) +
+      liveTimerSeconds
+    : 0;
+
+  async function toggleTimer() {
+    if (!selectedWorkspace || !ticket) return;
+    setIsSaving(true);
+    setError(undefined);
+    try {
+      if (activeTimer) {
+        await stopTicketTimer(selectedWorkspace.slug, ticket.reference);
+      } else {
+        await startTicketTimer(selectedWorkspace.slug, ticket.reference);
+      }
+      await loadTicket();
+      setNow(Date.now());
+      window.dispatchEvent(new Event(timerChangedEvent));
+    } catch {
+      setError(
+        activeTimer
+          ? "Unable to stop this timer."
+          : "Unable to start the timer. Stop your other running timer first.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function saveDueDate() {
+    if (!selectedWorkspace || !ticket) return;
+    setIsSaving(true);
+    setError(undefined);
+    try {
+      const updated = await updateBoardTicket(
+        selectedWorkspace.slug,
+        ticket.reference,
+        { due_date: dueDate || null },
+      );
+      setTicket((current) =>
+        current ? { ...current, ...updated } : current,
+      );
+    } catch {
+      setError("Unable to update the due date.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function saveEstimate() {
+    if (!selectedWorkspace || !ticket) return;
+    setIsSaving(true);
+    setError(undefined);
+    try {
+      const updated = await updateBoardTicket(
+        selectedWorkspace.slug,
+        ticket.reference,
+        {
+          estimated_minutes: Math.max(
+            0,
+            Number(estimateMinutes) || 0,
+          ),
+        },
+      );
+      setTicket((current) =>
+        current ? { ...current, ...updated } : current,
+      );
+      setEstimateMinutes(updated.estimated_minutes.toString());
+    } catch {
+      setError("Unable to update the estimated time.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function updateStatus(status: TopicTicket["status"]) {
+    if (!selectedWorkspace || !ticket) return;
+    setIsSaving(true);
+    setError(undefined);
+    try {
+      await updateBoardTicket(selectedWorkspace.slug, ticket.reference, {
+        status,
+      });
+      await loadTicket();
+      window.dispatchEvent(new Event(timerChangedEvent));
+    } catch {
+      setError("Unable to update the Ticket status.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   async function handleDelete() {
     if (
       !selectedWorkspace ||
       !ticket ||
-      deleteConfirmation !== deleteConfirmationTarget
+      deleteConfirmation !==
+        (ticket.origin_topic?.title ?? ticket.reference)
     ) {
       return;
     }
-    setIsDeleting(true);
-    setDeleteError(undefined);
+    setIsSaving(true);
     try {
       await deleteTicket(
         selectedWorkspace.slug,
-        ticket.id,
+        ticket.reference,
         deleteConfirmation,
       );
       router.replace("/board");
       router.refresh();
     } catch {
-      setDeleteError(
-        "Unable to delete this Ticket. Check the confirmation and your role.",
-      );
-      setIsDeleting(false);
+      setError("Unable to delete the Ticket.");
+      setIsSaving(false);
     }
   }
 
   if (ticket === undefined) {
-    return <div className="flex-1 bg-[var(--surface)]" />;
+    return (
+      <div className="grid flex-1 place-items-center text-sm text-[var(--outline)]">
+        Loading Ticket…
+      </div>
+    );
   }
 
   if (ticket === null) {
     return (
-      <div className="grid flex-1 place-items-center p-6">
-        <div className="max-w-md text-center">
-          <span className="mx-auto mb-5 grid size-14 place-items-center rounded-xl bg-[var(--surface-container-highest)] text-xl text-[var(--primary)]">?</span>
-          <h1 className="text-2xl font-semibold">Ticket {id} was not found</h1>
-          <p className="mt-2 text-sm leading-6 text-[var(--on-surface-variant)]">
-            It may have been removed, or the ticket link may be incorrect.
-          </p>
-          <Link className="mt-6 inline-block rounded-lg bg-[var(--primary-container)] px-5 py-3 text-sm font-semibold text-white" href="/board">
-            Return to board
+      <div className="grid flex-1 place-items-center p-6 text-center">
+        <div>
+          <h1 className="text-xl font-semibold">Ticket {id} was not found</h1>
+          <Link
+            className="mt-5 inline-block text-sm font-semibold text-[var(--primary)]"
+            href="/board"
+          >
+            Return to Tickets
           </Link>
         </div>
       </div>
     );
   }
 
+  const timerDisabled =
+    isSaving ||
+    !canTrack ||
+    ticket.status === "completed" ||
+    ticket.status === "closed" ||
+    Boolean(activeTimer && !timerOwner && !canManageAnyTimer);
+  const confirmationTarget =
+    ticket.origin_topic?.title ?? ticket.reference;
+  const canDelete =
+    selectedWorkspace?.role === "owner" ||
+    selectedWorkspace?.role === "admin";
+
   return (
-    <div className="grid min-h-0 flex-1 overflow-y-auto xl:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="min-w-0 p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto max-w-4xl">
-          <div className="mb-6">
-            <div className="mb-3 flex flex-wrap items-center gap-3">
-              <Link className="font-mono text-xs font-semibold text-[var(--primary)] hover:underline" href="/board">
-                {ticket.id}
-              </Link>
-              <span className="text-[var(--outline-variant)]">•</span>
-              <span className="font-mono text-[10px] text-[var(--outline)]">Created {ticket.created}</span>
-              <span className="text-[var(--outline-variant)]">•</span>
-              <span className="font-mono text-[10px] text-[var(--outline)]">{ticket.project}</span>
-            </div>
-            <h1 className="max-w-3xl text-2xl font-semibold leading-8 tracking-[-0.01em]">{ticket.title}</h1>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Badge className={priorityStyles[ticket.priority]}>{ticket.priority.toUpperCase()}</Badge>
-              <Badge className={statusStyles[ticket.status]}>{ticket.status.toUpperCase()}</Badge>
-              <Badge className="border-[var(--outline)]/30 bg-[var(--surface-container-highest)]/30 text-[var(--on-surface-variant)]">{ticket.type.toUpperCase()}</Badge>
-            </div>
-          </div>
-
-          <section className="mb-6 rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-5 sm:p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="flex items-center gap-3 text-lg font-semibold">
-                <span className="text-[var(--primary)]">▤</span>
-                Description
-              </h2>
-              <button className="font-mono text-[10px] font-semibold text-[var(--primary)] hover:underline" type="button">EDIT</button>
-            </div>
-            <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--on-surface-variant)]">{ticket.description}</p>
-          </section>
-
-          {ticket.originTopic ? (
-            <Link
-              className="mb-6 block rounded-xl border border-[var(--primary)]/30 bg-[var(--primary)]/5 p-5 transition hover:bg-[var(--primary)]/10"
-              href={`/topics/${ticket.originTopic.uid}`}
-            >
-              <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--primary)]">
-                Origin Topic
-              </span>
-              <strong className="mt-2 block text-sm">
-                {ticket.originTopic.title}
-              </strong>
-              <span className="mt-1 block text-xs capitalize text-[var(--on-surface-variant)]">
-                {ticket.originTopic.topicType.replaceAll("_", " ")} ·{" "}
-                {ticket.originTopic.status.replaceAll("_", " ")}
-              </span>
-            </Link>
-          ) : null}
-
-          {ticket.externalLinks?.length ? (
-            <section className="mb-6 rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-5">
-              <h2 className="mb-3 text-sm font-semibold">
-                Code &amp; project links
-              </h2>
-              <div className="space-y-2">
-                {ticket.externalLinks.map((item) => (
-                  <a
-                    className="flex items-center justify-between rounded-lg border border-[var(--outline-variant)] px-3 py-2 text-sm hover:bg-[var(--surface-container-high)]"
-                    href={item.url}
-                    key={item.uid}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <span>{item.label || item.url}</span>
-                    <span className="ml-3 text-[10px] uppercase text-[var(--outline)]">
-                      {item.provider.replaceAll("_", " ")}
-                    </span>
-                  </a>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          <section className="mb-6 rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-5">
-            <h2 className="mb-4 flex items-center gap-3 text-lg font-semibold">
-              <span className="text-[var(--primary)]">⌕</span>
-              Attachments
-            </h2>
-            <div className="rounded-lg border border-dashed border-[var(--outline-variant)] p-7 text-center">
-              <p className="text-sm text-[var(--on-surface-variant)]">No files attached to this issue.</p>
-              <label className="mt-3 inline-block cursor-pointer text-xs font-semibold text-[var(--primary)] hover:underline">
-                Upload attachment
-                <input className="sr-only" multiple type="file" />
-              </label>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="mb-5 flex items-center gap-3 text-lg font-semibold">
-              <span className="text-[var(--primary)]">◌</span>
-              Activity
-            </h2>
-            <div className="flex gap-4">
-              <span className="grid size-8 shrink-0 place-items-center rounded-full border border-[var(--outline-variant)] bg-[var(--surface)] text-[9px] text-[var(--primary)]">AM</span>
-              <div className="flex-1">
-                <div className="mb-2 flex items-center gap-2">
-                  <strong className="text-sm">Alex Morgan</strong>
-                  <span className="font-mono text-[10px] text-[var(--outline)]">{ticket.created}</span>
-                </div>
-                <p className="rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container)] p-4 text-sm text-[var(--on-surface-variant)]">
-                  Created this issue in {ticket.project}.
-                </p>
-              </div>
-            </div>
-            <form className="mt-6 rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-high)] p-4">
-              <label className="sr-only" htmlFor={`comment-${ticket.id}`}>Add a comment</label>
-              <textarea
-                className="min-h-24 w-full resize-y bg-transparent text-sm text-[var(--on-surface)] outline-none placeholder:text-[var(--outline)]"
-                id={`comment-${ticket.id}`}
-                placeholder="Write a comment or mention a teammate..."
-              />
-              <div className="flex justify-end border-t border-[var(--outline-variant)] pt-3">
-                <button className="rounded-lg bg-[var(--primary-container)] px-5 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-hover)]" type="submit">Send</button>
-              </div>
-            </form>
-          </section>
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+      <main className="mx-auto max-w-6xl">
+        <div className="mb-5 flex flex-wrap items-center gap-2 font-mono text-[10px] text-[var(--outline)]">
+          <Link className="text-[var(--primary)] hover:underline" href="/board">
+            Tickets
+          </Link>
+          <span>/</span>
+          <span>{ticket.reference}</span>
+          <span>·</span>
+          <span>{ticket.project_name}</span>
         </div>
-      </div>
 
-      <aside className="border-t border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-5 xl:overflow-y-auto xl:border-l xl:border-t-0">
-        <article className="ai-panel mb-6 rounded-xl p-5">
-          <div className="mb-3 flex items-center gap-3">
-            <span className="grid size-9 place-items-center rounded-lg bg-[var(--primary-container)] text-white">✦</span>
-            <h2 className="text-xl font-bold">AI triage</h2>
+        <header className="mb-6">
+          <h1 className="max-w-4xl text-2xl font-semibold leading-tight sm:text-3xl">
+            {ticket.title}
+          </h1>
+          <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold uppercase">
+            <span className="rounded-full bg-[var(--surface-container-high)] px-3 py-1">
+              {statusLabels[ticket.status]}
+            </span>
+            {ticket.priority ? (
+              <span className="rounded-full bg-[var(--primary)]/10 px-3 py-1 text-[var(--primary)]">
+                {ticket.priority}
+              </span>
+            ) : null}
           </div>
-          <p className="mb-4 text-sm leading-6 text-[var(--on-surface-variant)]">
-            TicketSense classified this as a <strong className="text-[var(--on-surface)]">{ticket.priority.toLowerCase()} priority {ticket.type.toLowerCase()}</strong>.
-            Review recent {ticket.project} issues for related incidents before assigning a fix.
-          </p>
-          <button className="w-full rounded-lg bg-[var(--primary-container)] px-4 py-3 text-sm font-bold text-[var(--on-primary-container)] hover:bg-[var(--primary-hover)]" type="button">
-            Find similar issues
-          </button>
-        </article>
+        </header>
 
-        <SidebarSection title="DETAILS">
-          <Detail label="ASSIGNEE">
-            <span className="flex items-center gap-2">
-              <span className="grid size-7 place-items-center rounded-full bg-[var(--primary-container)] text-[9px] text-white">{ticket.initials}</span>
-              {ticket.assignee}
-            </span>
-          </Detail>
-          <Detail label="PROJECT">{ticket.project}</Detail>
-          <Detail label="DUE DATE"><span className={ticket.priority === "Critical" ? "text-[var(--error)]" : ""}>◷ {ticket.dueDate ?? "Not set"}</span></Detail>
-          <Detail label="LABELS">
-            <span className="flex flex-wrap gap-2">
-              {ticket.labels.length ? (
-                ticket.labels.map((label) => (
-                  <span className="rounded bg-[var(--surface-container-highest)] px-2 py-1 text-[11px]" key={label}>{label}</span>
-                ))
-              ) : (
-                <span className="text-[var(--outline)]">No labels</span>
-              )}
-            </span>
-          </Detail>
-        </SidebarSection>
-
-        <SidebarSection title="WORKFLOW">
-          <label className="block text-xs text-[var(--outline)]">
-            Status
-            <select className="mt-2 w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-2.5 text-sm text-[var(--on-surface)]" defaultValue={ticket.status}>
-              <option>Open</option>
-              <option>In Progress</option>
-              <option>Review</option>
-              <option>Backlog</option>
-            </select>
-          </label>
-        </SidebarSection>
-
-        {canDelete ? (
-          <SidebarSection title="DANGER ZONE">
-            <p className="text-xs leading-5 text-[var(--on-surface-variant)]">
-              Ticket deletion is permanent in the interface and is only
-              available from this detail page.
-            </p>
+        <section className="mb-6 rounded-xl border border-[var(--primary)]/35 bg-[var(--primary)]/5 p-5 shadow-sm">
+          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+            <div>
+              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--primary)]">
+                <Clock3 size={15} /> Work timer
+              </p>
+              <p className="mt-2 font-mono text-3xl font-semibold">
+                {activeTimer
+                  ? formatDuration(liveTimerSeconds)
+                  : formatDuration(totalTrackedSeconds)}
+              </p>
+              <p className="mt-1 text-xs text-[var(--on-surface-variant)]">
+                {activeTimer
+                  ? `Running for ${activeTimer.user_name} · syncing every 15 seconds`
+                  : `Total tracked · ${ticket.time_entries.length} session${ticket.time_entries.length === 1 ? "" : "s"}`}
+              </p>
+            </div>
             <button
-              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--error)]/50 px-4 py-2.5 text-xs font-semibold text-[var(--error)] hover:bg-[var(--error)]/10"
-              onClick={() => {
-                setDeleteConfirmation("");
-                setDeleteError(undefined);
-                setShowDelete(true);
-              }}
+              className={`inline-flex min-w-32 items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
+                activeTimer
+                  ? "bg-[var(--error)]"
+                  : "bg-[var(--primary-container)]"
+              }`}
+              disabled={timerDisabled}
+              onClick={() => void toggleTimer()}
               type="button"
             >
-              <Trash2 size={14} />
-              Delete Ticket
+              {activeTimer ? <Square size={15} /> : <Play size={15} />}
+              {activeTimer ? "Stop timer" : "Start timer"}
             </button>
-          </SidebarSection>
+          </div>
+        </section>
+
+        {error ? (
+          <p
+            className="mb-5 rounded-lg border border-[var(--error)]/30 bg-[var(--error)]/10 px-4 py-3 text-sm text-[var(--error)]"
+            role="alert"
+          >
+            {error}
+          </p>
         ) : null}
-      </aside>
+
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_330px]">
+          <div className="space-y-6">
+            <section className="rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-5 sm:p-6">
+              <h2 className="mb-4 text-lg font-semibold">Description</h2>
+              <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--on-surface-variant)]">
+                {ticket.description}
+              </p>
+            </section>
+
+            {ticket.origin_topic ? (
+              <Link
+                className="block rounded-xl border border-[var(--primary)]/30 bg-[var(--primary)]/5 p-5 transition hover:bg-[var(--primary)]/10"
+                href={`/topics/${ticket.origin_topic.uid}`}
+              >
+                <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--primary)]">
+                  Origin Topic
+                </span>
+                <strong className="mt-2 block text-sm">
+                  {ticket.origin_topic.title}
+                </strong>
+                <span className="mt-1 block text-xs capitalize text-[var(--on-surface-variant)]">
+                  {ticket.origin_topic.topic_type.replaceAll("_", " ")} ·{" "}
+                  {ticket.origin_topic.status.replaceAll("_", " ")}
+                </span>
+              </Link>
+            ) : null}
+
+            <section className="rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-5 sm:p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Time history</h2>
+                  <p className="mt-1 text-xs text-[var(--outline)]">
+                    Every start and stop is retained as a separate session.
+                  </p>
+                </div>
+                <span className="font-mono text-sm">
+                  {formatDuration(totalTrackedSeconds)}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[620px] text-left text-xs">
+                  <thead className="border-b border-[var(--outline-variant)] text-[10px] uppercase text-[var(--outline)]">
+                    <tr>
+                      <th className="px-2 py-3">Member</th>
+                      <th className="px-2 py-3">Status</th>
+                      <th className="px-2 py-3">Started</th>
+                      <th className="px-2 py-3">Ended</th>
+                      <th className="px-2 py-3 text-right">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ticket.time_entries.map((entry) => (
+                      <tr
+                        className="border-b border-[var(--outline-variant)]/60 last:border-0"
+                        key={entry.uid}
+                      >
+                        <td className="px-2 py-3 font-medium">
+                          {entry.user_name}
+                        </td>
+                        <td className="px-2 py-3 capitalize">
+                          <span
+                            className={`rounded-full px-2 py-1 ${
+                              entry.status === "progressing"
+                                ? "bg-[var(--success)]/10 text-[var(--success)]"
+                                : "bg-[var(--surface-container-high)]"
+                            }`}
+                          >
+                            {entry.status}
+                          </span>
+                        </td>
+                        <td className="px-2 py-3">
+                          {formatDateTime(entry.started_at)}
+                        </td>
+                        <td className="px-2 py-3">
+                          {formatDateTime(entry.stopped_at)}
+                        </td>
+                        <td className="px-2 py-3 text-right font-mono">
+                          {formatDuration(
+                            entry.status === "progressing"
+                              ? liveTimerSeconds
+                              : entry.duration_seconds,
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {!ticket.time_entries.length ? (
+                      <tr>
+                        <td
+                          className="px-2 py-8 text-center text-[var(--outline)]"
+                          colSpan={5}
+                        >
+                          No time sessions yet.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <aside className="space-y-5">
+            <section className="rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-5">
+              <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide">
+                Details
+              </h2>
+              <dl className="space-y-4 text-sm">
+                <div>
+                  <dt className="text-[10px] uppercase text-[var(--outline)]">
+                    Project
+                  </dt>
+                  <dd className="mt-1 font-medium">{ticket.project_name}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] uppercase text-[var(--outline)]">
+                    Assignee
+                  </dt>
+                  <dd className="mt-1">
+                    {ticket.assignee_name ?? "Unassigned"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] uppercase text-[var(--outline)]">
+                    Estimated time
+                  </dt>
+                  <dd className="mt-2">
+                    <div className="flex gap-2">
+                      <input
+                        aria-label="Estimated minutes"
+                        className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-3 text-sm"
+                        disabled={selectedWorkspace?.role === "guest"}
+                        min="0"
+                        onChange={(event) =>
+                          setEstimateMinutes(event.target.value)
+                        }
+                        type="number"
+                        value={estimateMinutes}
+                      />
+                      <button
+                        className="rounded-lg bg-[var(--primary-container)] px-3 text-xs font-semibold text-white disabled:opacity-40"
+                        disabled={
+                          isSaving ||
+                          selectedWorkspace?.role === "guest" ||
+                          estimateMinutes ===
+                            ticket.estimated_minutes.toString()
+                        }
+                        onClick={() => void saveEstimate()}
+                        type="button"
+                      >
+                        Save
+                      </button>
+                    </div>
+                    <span className="mt-1 block text-[10px] text-[var(--outline)]">
+                      Minutes ·{" "}
+                      {ticket.estimated_minutes
+                        ? formatDuration(ticket.estimated_minutes * 60)
+                        : "No estimate"}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className="rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-5">
+              <label className="text-xs font-semibold" htmlFor="ticket-status">
+                Status
+              </label>
+              <select
+                className="mt-2 h-10 w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-3 text-sm"
+                disabled={isSaving || selectedWorkspace?.role === "guest"}
+                id="ticket-status"
+                onChange={(event) =>
+                  void updateStatus(
+                    event.target.value as TopicTicket["status"],
+                  )
+                }
+                value={ticket.status}
+              >
+                {Object.entries(statusLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </section>
+
+            <section className="rounded-xl border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-5">
+              <label
+                className="flex items-center gap-2 text-xs font-semibold"
+                htmlFor="ticket-due-date"
+              >
+                <CalendarDays size={14} /> Due date
+              </label>
+              <input
+                className="mt-2 h-10 w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-3 text-sm"
+                disabled={selectedWorkspace?.role === "guest"}
+                id="ticket-due-date"
+                onChange={(event) => setDueDate(event.target.value)}
+                type="date"
+                value={dueDate}
+              />
+              <button
+                className="mt-3 w-full rounded-lg bg-[var(--primary-container)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+                disabled={
+                  isSaving ||
+                  selectedWorkspace?.role === "guest" ||
+                  dueDate === (ticket.due_date ?? "")
+                }
+                onClick={() => void saveDueDate()}
+                type="button"
+              >
+                Save due date
+              </button>
+            </section>
+
+            {canDelete ? (
+              <section className="rounded-xl border border-[var(--error)]/25 bg-[var(--error)]/5 p-5">
+                <h2 className="text-xs font-semibold uppercase text-[var(--error)]">
+                  Danger zone
+                </h2>
+                <button
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--error)]/40 px-3 py-2 text-xs font-semibold text-[var(--error)]"
+                  onClick={() => setShowDelete(true)}
+                  type="button"
+                >
+                  <Trash2 size={14} /> Delete Ticket
+                </button>
+              </section>
+            ) : null}
+          </aside>
+        </div>
+      </main>
 
       {showDelete ? (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4"
           onMouseDown={(event) => {
-            if (event.currentTarget === event.target && !isDeleting) {
+            if (event.currentTarget === event.target && !isSaving) {
               setShowDelete(false);
             }
           }}
@@ -354,93 +602,56 @@ export function TicketDetail({ id }: { id: string }) {
           >
             <div className="flex items-start justify-between gap-4">
               <div className="flex gap-3">
-                <span className="mt-0.5 text-[var(--error)]">
-                  <AlertTriangle size={20} />
-                </span>
+                <AlertTriangle
+                  className="mt-0.5 text-[var(--error)]"
+                  size={20}
+                />
                 <div>
-                  <h2
-                    className="text-lg font-semibold"
-                    id="delete-ticket-title"
-                  >
-                    Delete {ticket.id}
+                  <h2 className="text-lg font-semibold" id="delete-ticket-title">
+                    Delete {ticket.reference}
                   </h2>
-                  <p className="mt-2 text-sm leading-6 text-[var(--on-surface-variant)]">
-                    This removes the Ticket from the board. Its Origin
-                    Topic will remain available.
+                  <p className="mt-2 text-sm text-[var(--on-surface-variant)]">
+                    Type the confirmation text exactly to continue.
                   </p>
                 </div>
               </div>
               <button
                 aria-label="Close"
-                className="rounded-lg p-2 hover:bg-[var(--surface-container)]"
-                disabled={isDeleting}
+                disabled={isSaving}
                 onClick={() => setShowDelete(false)}
                 type="button"
               >
                 <X size={17} />
               </button>
             </div>
-
             <label className="mt-5 block text-xs font-semibold">
               Type{" "}
               <strong className="break-all text-[var(--error)]">
-                {deleteConfirmationTarget}
-              </strong>{" "}
-              to confirm
+                {confirmationTarget}
+              </strong>
               <input
                 autoComplete="off"
                 autoFocus
-                className="mt-2 h-11 w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-3 text-sm outline-none focus:border-[var(--error)]"
+                className="mt-2 h-11 w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-3 text-sm"
                 onChange={(event) =>
                   setDeleteConfirmation(event.target.value)
                 }
                 value={deleteConfirmation}
               />
             </label>
-
-            {deleteError ? (
-              <p className="mt-3 text-xs text-[var(--error)]" role="alert">
-                {deleteError}
-              </p>
-            ) : null}
-
             <button
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--error)] px-4 py-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--error)] px-4 py-3 text-xs font-semibold text-white disabled:opacity-40"
               disabled={
-                isDeleting ||
-                deleteConfirmation !== deleteConfirmationTarget
+                isSaving || deleteConfirmation !== confirmationTarget
               }
               onClick={() => void handleDelete()}
               type="button"
             >
-              <Trash2 size={14} />
-              {isDeleting ? "Deleting…" : "Delete this Ticket"}
+              <Trash2 size={14} /> Delete this Ticket
             </button>
           </section>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function Badge({ children, className }: { children: React.ReactNode; className: string }) {
-  return <span className={`rounded-full border px-3 py-1 font-mono text-[10px] font-bold ${className}`}>{children}</span>;
-}
-
-function SidebarSection({ children, title }: { children: React.ReactNode; title: string }) {
-  return (
-    <section className="mb-6 border-b border-[var(--outline-variant)] pb-6 last:border-0">
-      <h3 className="mb-3 font-mono text-[10px] tracking-wider text-[var(--outline)]">{title}</h3>
-      <div className="space-y-2">{children}</div>
-    </section>
-  );
-}
-
-function Detail({ children, label }: { children: React.ReactNode; label: string }) {
-  return (
-    <div className="grid grid-cols-[90px_1fr] items-center gap-3 py-2 text-sm">
-      <span className="font-mono text-[9px] text-[var(--outline)]">{label}</span>
-      <span className="text-[var(--on-surface-variant)]">{children}</span>
     </div>
   );
 }

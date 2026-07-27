@@ -104,12 +104,10 @@ class TopicSerializer(serializers.ModelSerializer):
     project_uid = serializers.UUIDField(
         source="project.uid",
         read_only=True,
-        allow_null=True,
     )
     project_name = serializers.CharField(
         source="project.name",
         read_only=True,
-        allow_null=True,
     )
     created_by_uid = serializers.UUIDField(
         source="created_by.uid",
@@ -183,7 +181,7 @@ class TopicDetailSerializer(TopicSerializer):
 
 
 class TopicCreateSerializer(serializers.ModelSerializer):
-    project_uid = serializers.UUIDField(required=False, allow_null=True)
+    project_uid = serializers.UUIDField()
 
     class Meta:
         model = Topic
@@ -286,4 +284,9 @@ class TopicTicketCreateSerializer(serializers.Serializer):
     priority = serializers.ChoiceField(
         choices=Topic.Priority.choices,
     )
-    project_uid = serializers.UUIDField(required=False, allow_null=True)
+    project_uid = serializers.UUIDField()
+    estimated_minutes = serializers.IntegerField(
+        required=False,
+        min_value=0,
+        max_value=525600,
+    )

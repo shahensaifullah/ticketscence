@@ -156,6 +156,57 @@ export type WorkspaceMember = {
   role_label: string;
 };
 
+export type ProjectStatus =
+  | "planned"
+  | "in_progress"
+  | "on_hold"
+  | "completed"
+  | "archived";
+
+export type ProjectMetrics = {
+  ticket_count: number;
+  open_ticket_count: number;
+  completed_ticket_count: number;
+  member_count: number;
+  total_estimated_minutes: number;
+  remaining_estimated_minutes: number;
+  total_tracked_seconds: number;
+  progress_percent: number;
+};
+
+export type Project = {
+  uid: string;
+  organization_uid: string;
+  name: string;
+  key: string;
+  description: string;
+  status: ProjectStatus;
+  priority: TopicPriority | null;
+  lead_uid: string | null;
+  lead_name: string | null;
+  created_by_uid: string | null;
+  created_by_name: string | null;
+  start_date: string | null;
+  target_date: string | null;
+  color: string;
+  is_active: boolean;
+  metrics: ProjectMetrics;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProjectMember = {
+  user_uid: string;
+  name: string;
+  email: string;
+};
+
+export type ProjectDetail = Project & {
+  members: ProjectMember[];
+  topic_count: number;
+  tickets: TopicTicket[];
+};
+
 export type WorkspaceListResponse = {
   user: WorkspaceUser;
   workspaces: WorkspaceSummary[];
@@ -217,9 +268,28 @@ export type TopicTicket = {
     | "completed"
     | "closed";
   priority: TopicPriority | null;
-  project_uid: string | null;
-  project_name: string | null;
+  estimated_minutes: number;
+  due_date: string | null;
+  project_uid: string;
+  project_name: string;
+  assignee_uid: string | null;
+  assignee_name: string | null;
+  total_tracked_seconds: number;
+  active_timer: TicketTimeEntry | null;
   created_at: string;
+};
+
+export type TicketTimeEntry = {
+  uid: string;
+  user_uid: string;
+  user_name: string;
+  started_at: string;
+  stopped_at: string | null;
+  last_heartbeat_at: string;
+  status: "progressing" | "completed";
+  progress_seconds: number;
+  duration_seconds: number;
+  elapsed_seconds: number;
 };
 
 export type TicketOriginTopic = {
@@ -240,11 +310,13 @@ export type TicketDetailResponse = TopicTicket & {
     label: string;
     created_at: string;
   }>;
+  time_entries: TicketTimeEntry[];
 };
 
 export type BoardTicket = {
   uid: string;
   reference: string;
+  organization_slug: string;
   title: string;
   status:
     | "backlog"
@@ -254,10 +326,14 @@ export type BoardTicket = {
     | "completed"
     | "closed";
   priority: TopicPriority | null;
-  project_uid: string | null;
-  project_name: string | null;
+  estimated_minutes: number;
+  due_date: string | null;
+  project_uid: string;
+  project_name: string;
   assignee_uid: string | null;
   assignee_name: string | null;
+  total_tracked_seconds: number;
+  active_timer: TicketTimeEntry | null;
   created_at: string;
 };
 
@@ -305,8 +381,8 @@ export type TopicParticipant = {
 export type Topic = {
   uid: string;
   organization_uid: string;
-  project_uid: string | null;
-  project_name: string | null;
+  project_uid: string;
+  project_name: string;
   title: string;
   description: string;
   topic_type: TopicType;
@@ -421,6 +497,46 @@ function topicBaseUrl(slug: string) {
   return `/api/workspaces/${encodeURIComponent(slug)}/topics`;
 }
 
+function projectBaseUrl(slug: string) {
+  return `/api/workspaces/${encodeURIComponent(slug)}/projects`;
+}
+
+export async function getProjects(slug: string) {
+  const response = await api.get<Project[]>(
+    `${projectBaseUrl(slug)}/`,
+  );
+  return response.data;
+}
+
+export async function getProject(slug: string, key: string) {
+  const response = await api.get<ProjectDetail>(
+    `${projectBaseUrl(slug)}/${encodeURIComponent(key)}`,
+  );
+  return response.data;
+}
+
+export async function createProject(
+  slug: string,
+  payload: {
+    name: string;
+    key: string;
+    description?: string;
+    status?: ProjectStatus;
+    priority?: TopicPriority | null;
+    lead_uid?: string | null;
+    member_user_uids?: string[];
+    start_date?: string | null;
+    target_date?: string | null;
+    color?: string;
+  },
+) {
+  const response = await api.post<Project>(
+    `${projectBaseUrl(slug)}/`,
+    payload,
+  );
+  return response.data;
+}
+
 export async function getTopics(slug: string) {
   const response = await api.get<Topic[]>(
     `${topicBaseUrl(slug)}/`,
@@ -435,6 +551,7 @@ export async function createTopic(
     description: string;
     topic_type: TopicType;
     priority?: TopicPriority | null;
+    project_uid: string;
   },
 ) {
   const response = await api.post<Topic>(
@@ -528,6 +645,8 @@ export async function createTicketFromTopic(
     title: string;
     description: string;
     priority: TopicPriority;
+    project_uid: string;
+    estimated_minutes?: number;
   },
 ) {
   const response = await api.post<TopicTicket>(
@@ -544,6 +663,24 @@ export async function getTicket(slug: string, reference: string) {
   return response.data;
 }
 
+export async function createTicket(
+  slug: string,
+  payload: {
+    project_uid: string;
+    title: string;
+    description: string;
+    priority?: TopicPriority | null;
+    estimated_minutes?: number;
+    due_date?: string | null;
+  },
+) {
+  const response = await api.post<TicketDetailResponse>(
+    `/api/workspaces/${encodeURIComponent(slug)}/tickets/`,
+    payload,
+  );
+  return response.data;
+}
+
 export async function deleteTicket(
   slug: string,
   reference: string,
@@ -555,9 +692,13 @@ export async function deleteTicket(
   );
 }
 
-export async function getBoardTickets(slug: string) {
+export async function getBoardTickets(
+  slug: string,
+  project?: string,
+) {
   const response = await api.get<BoardTicket[]>(
     `/api/workspaces/${encodeURIComponent(slug)}/tickets/`,
+    { params: project ? { project } : undefined },
   );
   return response.data;
 }
@@ -568,11 +709,51 @@ export async function updateBoardTicket(
   payload: {
     status?: BoardTicket["status"];
     assignee_uid?: string | null;
+    project_uid?: string;
+    estimated_minutes?: number;
+    due_date?: string | null;
   },
 ) {
   const response = await api.patch<BoardTicket>(
     `/api/workspaces/${encodeURIComponent(slug)}/tickets/${encodeURIComponent(reference)}`,
     payload,
+  );
+  return response.data;
+}
+
+export async function startTicketTimer(
+  slug: string,
+  reference: string,
+) {
+  const response = await api.post<BoardTicket>(
+    `/api/workspaces/${encodeURIComponent(slug)}/tickets/${encodeURIComponent(reference)}/timer/start`,
+  );
+  return response.data;
+}
+
+export async function getActiveTicketTimer(slug: string) {
+  const response = await api.get<BoardTicket | null>(
+    `/api/workspaces/${encodeURIComponent(slug)}/tickets/timer/active`,
+  );
+  return response.data;
+}
+
+export async function stopTicketTimer(
+  slug: string,
+  reference: string,
+) {
+  const response = await api.post<BoardTicket>(
+    `/api/workspaces/${encodeURIComponent(slug)}/tickets/${encodeURIComponent(reference)}/timer/stop`,
+  );
+  return response.data;
+}
+
+export async function heartbeatTicketTimer(
+  slug: string,
+  reference: string,
+) {
+  const response = await api.post<BoardTicket>(
+    `/api/workspaces/${encodeURIComponent(slug)}/tickets/${encodeURIComponent(reference)}/timer/heartbeat`,
   );
   return response.data;
 }

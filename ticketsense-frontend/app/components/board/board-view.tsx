@@ -1,21 +1,23 @@
 "use client";
 
-import Link from "next/link";
 import {
   ChevronLeft,
   ChevronRight,
-  MessageSquareText,
+  Clock3,
   Search,
   UserRound,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/app/components/ui/product-ui";
 import { useWorkspaces } from "@/app/components/workspace-provider";
 import {
   getBoardTickets,
+  getProjects,
   getWorkspaceDashboard,
   updateBoardTicket,
   type BoardTicket,
+  type Project,
   type WorkspaceMember,
 } from "@/lib/api";
 
@@ -38,10 +40,25 @@ const priorityStyles = {
   low: "text-[var(--outline)]",
 } as const;
 
+function formatDuration(totalSeconds: number) {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = seconds % 60;
+  return hours
+    ? `${hours}:${minutes.toString().padStart(2, "0")}:${remainder
+        .toString()
+        .padStart(2, "0")}`
+    : `${minutes}:${remainder.toString().padStart(2, "0")}`;
+}
+
 export function BoardView() {
+  const router = useRouter();
   const { selectedWorkspace } = useWorkspaces();
   const [tickets, setTickets] = useState<BoardTicket[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectUid, setSelectedProjectUid] = useState("");
   const [query, setQuery] = useState("");
   const [savingReference, setSavingReference] = useState<string>();
   const [error, setError] = useState<string>();
@@ -52,16 +69,27 @@ export function BoardView() {
     Promise.all([
       getBoardTickets(selectedWorkspace.slug),
       getWorkspaceDashboard(selectedWorkspace.slug),
+      getProjects(selectedWorkspace.slug),
     ])
-      .then(([ticketData, dashboard]) => {
+      .then(([ticketData, dashboard, projectData]) => {
         if (!active) return;
         setTickets(ticketData);
+        setProjects(projectData);
         setMembers(
           dashboard.members.filter((member) => member.role !== "guest"),
         );
+        const requestedProject = new URLSearchParams(
+          window.location.search,
+        ).get("project");
+        if (
+          requestedProject &&
+          projectData.some((project) => project.uid === requestedProject)
+        ) {
+          setSelectedProjectUid(requestedProject);
+        }
       })
       .catch(() => {
-        if (active) setError("Unable to load the Board.");
+        if (active) setError("Unable to load Tickets.");
       });
     return () => {
       active = false;
@@ -70,13 +98,19 @@ export function BoardView() {
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return tickets;
-    return tickets.filter((ticket) =>
-      `${ticket.reference} ${ticket.title} ${ticket.project_name ?? ""} ${ticket.assignee_name ?? ""}`
+    return tickets.filter((ticket) => {
+      if (
+        selectedProjectUid &&
+        ticket.project_uid !== selectedProjectUid
+      ) {
+        return false;
+      }
+      if (!normalized) return true;
+      return `${ticket.reference} ${ticket.title} ${ticket.project_name} ${ticket.assignee_name ?? ""}`
         .toLowerCase()
-        .includes(normalized),
-    );
-  }, [query, tickets]);
+        .includes(normalized);
+    });
+  }, [query, selectedProjectUid, tickets]);
 
   async function updateCard(
     ticket: BoardTicket,
@@ -118,17 +152,9 @@ export function BoardView() {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 sm:p-6 lg:p-8">
       <div className="mb-5">
         <PageHeader
-          actions={
-            <Link
-              className="inline-flex items-center gap-2 rounded-lg bg-[var(--primary-container)] px-3 py-2 text-xs font-semibold text-[var(--on-primary-container)]"
-              href="/topics"
-            >
-              <MessageSquareText size={14} /> New Topic
-            </Link>
-          }
           description="Every card is a Ticket. Move work through the flow and assign a teammate directly on the card."
           eyebrow={selectedWorkspace?.name ?? "Workspace"}
-          title="Board"
+          title="Tickets"
         />
       </div>
 
@@ -141,19 +167,38 @@ export function BoardView() {
         </p>
       ) : null}
 
-      <label className="relative mb-4 block max-w-md">
-        <Search
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--outline)]"
-          size={16}
-        />
-        <span className="sr-only">Search Board</span>
-        <input
-          className="h-10 w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] pl-9 pr-3 text-sm outline-none focus:border-[var(--primary)]"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search cards…"
-          value={query}
-        />
-      </label>
+      <div className="mb-4 flex max-w-3xl flex-col gap-3 sm:flex-row">
+        <label className="relative block flex-1">
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--outline)]"
+            size={16}
+          />
+          <span className="sr-only">Search Tickets</span>
+          <input
+            className="h-10 w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] pl-9 pr-3 text-sm outline-none focus:border-[var(--primary)]"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search cards…"
+            value={query}
+          />
+        </label>
+        <label>
+          <span className="sr-only">Filter by project</span>
+          <select
+            className="h-10 min-w-56 rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 text-sm outline-none focus:border-[var(--primary)]"
+            onChange={(event) =>
+              setSelectedProjectUid(event.target.value)
+            }
+            value={selectedProjectUid}
+          >
+            <option value="">All projects</option>
+            {projects.map((project) => (
+              <option key={project.uid} value={project.uid}>
+                {project.key} — {project.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <div className="min-h-0 flex-1 overflow-x-auto pb-3">
         <div className="grid h-full min-w-[1740px] grid-cols-6 gap-3">
@@ -177,16 +222,24 @@ export function BoardView() {
                     const saving = savingReference === ticket.reference;
                     return (
                       <article
-                        className="rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-3 shadow-sm"
+                        className="cursor-pointer rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] p-3 shadow-sm transition hover:border-[var(--primary)]/50 hover:bg-[var(--surface-container-low)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40"
                         key={ticket.uid}
+                        onClick={() =>
+                          router.push(`/tickets/${ticket.reference}`)
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            router.push(`/tickets/${ticket.reference}`);
+                          }
+                        }}
+                        role="link"
+                        tabIndex={0}
                       >
                         <div className="mb-2 flex items-center justify-between">
-                          <Link
-                            className="font-mono text-[10px] font-semibold text-[var(--primary)]"
-                            href={`/tickets/${ticket.reference}`}
-                          >
+                          <span className="font-mono text-[10px] font-semibold text-[var(--primary)]">
                             {ticket.reference}
-                          </Link>
+                          </span>
                           {ticket.priority ? (
                             <span
                               className={`text-[9px] font-semibold uppercase ${priorityStyles[ticket.priority]}`}
@@ -204,6 +257,31 @@ export function BoardView() {
                           </p>
                         ) : null}
 
+                        <div className="mt-3 rounded-lg border border-[var(--outline-variant)] bg-[var(--surface-container-low)] p-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-1.5 font-mono text-[11px]">
+                              <Clock3 size={12} />
+                              {formatDuration(ticket.total_tracked_seconds)}
+                            </span>
+                            {ticket.active_timer ? (
+                              <span className="rounded-full bg-[var(--success)]/12 px-2 py-1 text-[9px] font-semibold text-[var(--success)]">
+                                Timer running
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-[9px] text-[var(--outline)]">
+                            Estimate:{" "}
+                            {ticket.estimated_minutes
+                              ? formatDuration(
+                                  ticket.estimated_minutes * 60,
+                                )
+                              : "Not set"}
+                            {ticket.active_timer
+                              ? ` · ${ticket.active_timer.user_name}`
+                              : ""}
+                          </p>
+                        </div>
+
                         <label className="mt-4 block">
                           <span className="mb-1 flex items-center gap-1 text-[9px] uppercase tracking-wide text-[var(--outline)]">
                             <UserRound size={11} /> Assignee
@@ -211,6 +289,7 @@ export function BoardView() {
                           <select
                             className="h-8 w-full rounded border border-[var(--outline-variant)] bg-[var(--surface-container-low)] px-2 text-[11px] outline-none focus:border-[var(--primary)]"
                             disabled={saving}
+                            onClick={(event) => event.stopPropagation()}
                             onChange={(event) =>
                               void updateCard(ticket, {
                                 assignee_uid: event.target.value || null,
@@ -232,7 +311,10 @@ export function BoardView() {
                             aria-label={`Move ${ticket.reference} backward`}
                             className="grid size-7 place-items-center rounded border border-[var(--outline-variant)] hover:bg-[var(--surface-container-high)] disabled:opacity-30"
                             disabled={saving || columnIndex === 0}
-                            onClick={() => moveCard(ticket, -1)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              moveCard(ticket, -1);
+                            }}
                             type="button"
                           >
                             <ChevronLeft size={13} />
@@ -243,7 +325,10 @@ export function BoardView() {
                             disabled={
                               saving || columnIndex === columns.length - 1
                             }
-                            onClick={() => moveCard(ticket, 1)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              moveCard(ticket, 1);
+                            }}
                             type="button"
                           >
                             <ChevronRight size={13} />

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, LogOut, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, LogOut, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { TicketMark } from "../icons";
 import { LogoutButton } from "../logout-button";
@@ -70,19 +70,6 @@ export function AppSidebar({
           >
             <X aria-hidden="true" size={18} />
           </button>
-        </div>
-
-        <div className="border-b border-[var(--outline-variant)] p-3">
-          <Link
-            className={`flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--primary-container)] px-3 text-sm font-semibold text-[var(--on-primary-container)] shadow-sm transition hover:brightness-110 active:scale-[0.98] ${
-              collapsed ? "md:px-0" : ""
-            }`}
-            href="/topics"
-            onClick={onCloseMobile}
-          >
-            <Plus aria-hidden="true" size={18} />
-            <span className={collapsed ? "md:hidden" : ""}>New Topic</span>
-          </Link>
         </div>
 
         <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">

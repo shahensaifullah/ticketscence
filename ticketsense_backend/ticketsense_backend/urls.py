@@ -13,6 +13,10 @@ urlpatterns = [
         "api/workspaces/<slug:workspace_slug>/tickets/",
         include("tickets.urls"),
     ),
+    path(
+        "api/workspaces/<slug:workspace_slug>/projects/",
+        include("projects.urls"),
+    ),
     path("api/workspaces/", include("organizations.urls")),
     # Temporary compatibility alias for clients using the previous endpoint.
     path("api/organizations/", include("organizations.urls")),

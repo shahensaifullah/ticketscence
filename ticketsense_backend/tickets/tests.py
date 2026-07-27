@@ -8,6 +8,7 @@ from django.conf import settings
 from accounts.choices import WorkspaceRole
 from accounts.models import User
 from organizations.models import Workspace, WorkspaceMember
+from projects.models import Project
 from tickets.models import Ticket
 from topics.models import Topic, TopicMention
 from topics.services import topic_embedding_fingerprint
@@ -33,6 +34,12 @@ class TopicTicketApiTests(APITestCase):
         self.guest = self.add_member(
             "guest@example.com",
             WorkspaceRole.GUEST,
+        )
+        self.project = Project.objects.create(
+            organization=self.organization,
+            name="Checkout",
+            key="PAY",
+            created_by=self.owner,
         )
 
     def add_member(self, email, role):
@@ -62,6 +69,7 @@ class TopicTicketApiTests(APITestCase):
                 "description": "The team needs to understand gateway errors.",
                 "topic_type": "bug",
                 "priority": "high",
+                "project_uid": str(self.project.uid),
             },
             format="json",
         )
@@ -73,6 +81,7 @@ class TopicTicketApiTests(APITestCase):
             "title": title,
             "description": f"Work required for: {title}.",
             "priority": "high",
+            "project_uid": str(self.project.uid),
         }
 
     def test_member_can_comment_reply_and_mention_organization_member(self):
@@ -127,14 +136,22 @@ class TopicTicketApiTests(APITestCase):
             topic = self.create_topic()
         matching_topic = Topic.objects.create(
             organization=self.organization,
+            project=self.project,
             title="Checkout gateway timeout",
             description="Payment checkout fails when the gateway times out.",
             topic_type=Topic.Type.BUG,
             created_by=self.admin,
         )
         other_organization = Workspace.objects.create(name="Other company")
+        other_project = Project.objects.create(
+            organization=other_organization,
+            name="Other",
+            key="OTHER",
+            created_by=self.admin,
+        )
         other_topic = Topic.objects.create(
             organization=other_organization,
+            project=other_project,
             title="Checkout gateway timeout in another company",
             description="This must never be suggested to Acme.",
             topic_type=Topic.Type.BUG,
@@ -167,6 +184,22 @@ class TopicTicketApiTests(APITestCase):
             titles,
         )
         embed_topic_delay_mock.assert_called_once()
+
+    def test_topic_requires_a_project(self):
+        self.authenticate(self.member)
+
+        response = self.client.post(
+            self.topics_url(),
+            {
+                "title": "Missing project",
+                "description": "This Topic must be rejected.",
+                "topic_type": "bug",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("project_uid", response.data)
 
     def test_admin_can_create_multiple_tickets_from_one_topic(self):
         topic = self.create_topic()

@@ -10,7 +10,7 @@ const segmentLabels: Record<string, string> = {
   topics: "Topics",
   tickets: "Tickets",
   new: "Create issue",
-  board: "Board",
+  board: "Tickets",
   projects: "Projects",
   assistant: "AI Assistant",
   analytics: "Analytics",

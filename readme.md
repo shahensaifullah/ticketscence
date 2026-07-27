@@ -57,6 +57,51 @@ FastEmbed:
 This is semantic matching rather than word-for-word searching. Normal Topic
 creation is not blocked while the background worker generates the vector.
 
+### How the model is downloaded
+
+The model weights are not committed to this Git repository and are not stored
+in PostgreSQL. The repository ignores `.model-cache/`, while PostgreSQL stores
+only the 384-number embedding generated for each Topic.
+
+With Docker, no separate model command is required. This command:
+
+```bash
+docker compose up --build
+```
+
+builds the backend image, and the backend
+[`Dockerfile`](ticketsense_backend/Dockerfile) executes the equivalent of:
+
+```python
+from fastembed import TextEmbedding
+
+TextEmbedding(
+    model_name="BAAI/bge-small-en-v1.5",
+    cache_dir="/app/.model-cache/fastembed",
+    threads=2,
+)
+```
+
+Creating the `TextEmbedding` instance downloads the model during the image
+build. The Django backend and Celery worker use the resulting cached Docker
+layer, so they can load the model without downloading it for every Topic.
+Docker needs internet access during the first build. Rebuilding normally reuses
+the cached layer unless the relevant Dockerfile or dependency layer changes.
+
+For a manual, non-Docker installation, `pip install -r requirements.txt`
+installs FastEmbed but not the model weights. FastEmbed downloads the weights
+automatically when Django or Celery first requests the model. To download it
+explicitly before starting the application, run this from
+`ticketsense_backend` with the virtual environment activated:
+
+```bash
+python -c "from pathlib import Path; from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir=str(Path('..') / '.model-cache' / 'fastembed'), threads=2)"
+```
+
+That cache directory is local to each developer's computer and remains outside
+Git. Internet access is only needed when the model is not already present in
+the selected cache.
+
 ## Technology stack
 
 | Layer | Technology |

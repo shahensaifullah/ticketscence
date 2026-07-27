@@ -26,6 +26,12 @@ package-lock.json
 .idea/
 .vscode/
 
+# Local AI assistant instructions
+ticketsense-frontend/CLAUDE.md
+ticketsense-frontend/AGENT.md
+ticketsense-frontend/AGENTS.md
+ticketsense-frontend/agent.md
+
 # OS
 .DS_Store
 

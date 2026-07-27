@@ -31,11 +31,13 @@ import {
   createTopic,
   createTopicComment,
   deleteTopic,
+  getProjects,
   getSimilarTopics,
   getTopic,
   getTopics,
   updateTopicSolution,
   uploadTopicAttachment,
+  type Project,
   type Topic,
   type TopicDetail,
   type TopicPriority,
@@ -80,11 +82,16 @@ export function TopicWorkspace({
   const [description, setDescription] = useState("");
   const [topicType, setTopicType] = useState<TopicType>("bug");
   const [priority, setPriority] = useState<TopicPriority | "">("");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [topicProjectUid, setTopicProjectUid] = useState("");
   const [showTicketCreate, setShowTicketCreate] = useState(false);
   const [ticketTitle, setTicketTitle] = useState("");
   const [ticketDescription, setTicketDescription] = useState("");
   const [ticketPriority, setTicketPriority] =
     useState<TopicPriority>("medium");
+  const [ticketProjectUid, setTicketProjectUid] = useState("");
+  const [ticketEstimateMinutes, setTicketEstimateMinutes] =
+    useState("60");
   const [showTopicDelete, setShowTopicDelete] = useState(false);
   const [topicDeleteConfirmation, setTopicDeleteConfirmation] =
     useState("");
@@ -143,6 +150,24 @@ export function TopicWorkspace({
       })
       .catch(() => {
         if (active) setError("Unable to load Topics.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedWorkspace]);
+
+  useEffect(() => {
+    if (!selectedWorkspace) return;
+    let active = true;
+    getProjects(selectedWorkspace.slug)
+      .then((data) => {
+        if (!active) return;
+        const activeProjects = data.filter((project) => project.is_active);
+        setProjects(activeProjects);
+        setTopicProjectUid((current) => current || activeProjects[0]?.uid || "");
+      })
+      .catch(() => {
+        if (active) setError("Unable to load projects.");
       });
     return () => {
       active = false;
@@ -222,7 +247,14 @@ export function TopicWorkspace({
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedWorkspace || !title.trim() || !description.trim()) return;
+    if (
+      !selectedWorkspace ||
+      !title.trim() ||
+      !description.trim() ||
+      !topicProjectUid
+    ) {
+      return;
+    }
     setIsSubmitting(true);
     setError(undefined);
     try {
@@ -231,11 +263,13 @@ export function TopicWorkspace({
         description: description.trim(),
         topic_type: topicType,
         priority: priority || null,
+        project_uid: topicProjectUid,
       });
       setTitle("");
       setDescription("");
       setTopicType("bug");
       setPriority("");
+      setTopicProjectUid("");
       setShowCreate(false);
       await loadTopics();
       setSelectedUid(created.uid);
@@ -290,6 +324,10 @@ export function TopicWorkspace({
     setTicketTitle("");
     setTicketDescription("");
     setTicketPriority(activeTopic?.priority ?? "medium");
+    setTicketProjectUid(
+      activeTopic?.project_uid ?? projects[0]?.uid ?? "",
+    );
+    setTicketEstimateMinutes("60");
     setShowTicketCreate(true);
   }
 
@@ -301,7 +339,8 @@ export function TopicWorkspace({
       !selectedWorkspace ||
       !selectedUid ||
       !ticketTitle.trim() ||
-      !ticketDescription.trim()
+      !ticketDescription.trim() ||
+      !ticketProjectUid
     ) {
       return;
     }
@@ -315,6 +354,8 @@ export function TopicWorkspace({
           title: ticketTitle.trim(),
           description: ticketDescription.trim(),
           priority: ticketPriority,
+          project_uid: ticketProjectUid,
+          estimated_minutes: Number(ticketEstimateMinutes) || 0,
         },
       );
       setShowTicketCreate(false);
@@ -477,6 +518,18 @@ export function TopicWorkspace({
               <option value="high">High</option>
               <option value="critical">Critical</option>
             </select>
+            <select
+              className="h-11 rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-3 text-sm"
+              onChange={(event) => setTopicProjectUid(event.target.value)}
+              value={topicProjectUid}
+            >
+              <option value="">Select project</option>
+              {projects.map((project) => (
+                <option key={project.uid} value={project.uid}>
+                  {project.key} — {project.name}
+                </option>
+              ))}
+            </select>
             <textarea
               className="min-h-28 resize-y rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] p-3 text-sm outline-none focus:border-[var(--primary)] lg:col-span-2"
               onChange={(event) => setDescription(event.target.value)}
@@ -486,7 +539,12 @@ export function TopicWorkspace({
             />
             <button
               className="w-fit rounded-lg bg-[var(--primary-container)] px-4 py-2.5 text-xs font-semibold text-[var(--on-primary-container)] disabled:opacity-50"
-              disabled={isSubmitting}
+              disabled={
+                isSubmitting ||
+                !title.trim() ||
+                !description.trim() ||
+                !topicProjectUid
+              }
               type="submit"
             >
               Create Topic
@@ -946,6 +1004,39 @@ export function TopicWorkspace({
               </select>
             </label>
 
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="block text-xs font-semibold">
+                Project
+                <select
+                  className="mt-2 h-11 w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-3 text-sm"
+                  onChange={(event) =>
+                    setTicketProjectUid(event.target.value)
+                  }
+                  required
+                  value={ticketProjectUid}
+                >
+                  <option value="">Select project</option>
+                  {projects.map((project) => (
+                    <option key={project.uid} value={project.uid}>
+                      {project.key} — {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-xs font-semibold">
+                Estimate (minutes)
+                <input
+                  className="mt-2 h-11 w-full rounded-lg border border-[var(--outline-variant)] bg-[var(--surface)] px-3 text-sm outline-none focus:border-[var(--primary)]"
+                  min="0"
+                  onChange={(event) =>
+                    setTicketEstimateMinutes(event.target.value)
+                  }
+                  type="number"
+                  value={ticketEstimateMinutes}
+                />
+              </label>
+            </div>
+
             <label className="mt-4 block text-xs font-semibold">
               Description
               <textarea
@@ -973,7 +1064,8 @@ export function TopicWorkspace({
                 disabled={
                   isSubmitting ||
                   !ticketTitle.trim() ||
-                  !ticketDescription.trim()
+                  !ticketDescription.trim() ||
+                  !ticketProjectUid
                 }
                 type="submit"
               >

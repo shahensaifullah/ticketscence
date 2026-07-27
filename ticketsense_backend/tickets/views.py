@@ -1,3 +1,4 @@
+from django.db import models
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -8,7 +9,7 @@ from rest_framework.views import APIView
 from accounts.choices import WorkspaceRole
 from organizations.models import WorkspaceMember
 from projects.models import Project
-from tickets.models import Ticket, TicketExternalLink
+from tickets.models import Ticket, TicketExternalLink, TicketTimeEntry
 from tickets.serializers import (
     TicketCreateSerializer,
     TicketDeleteSerializer,
@@ -18,7 +19,13 @@ from tickets.serializers import (
     TicketSummarySerializer,
     TicketUpdateSerializer,
 )
-from tickets.services import create_ticket, update_ticket
+from tickets.services import (
+    create_ticket,
+    heartbeat_ticket_timer,
+    start_ticket_timer,
+    stop_ticket_timer,
+    update_ticket,
+)
 from topics.models import Topic
 
 
@@ -48,19 +55,21 @@ def resolve_ticket(organization, reference):
     if normalized.startswith("TS-") and normalized[3:].isdigit():
         return get_object_or_404(
             Ticket.objects.select_related(
+                "organization",
                 "project",
                 "origin_topic",
                 "assignee",
-            ).prefetch_related("external_links"),
+            ).prefetch_related("external_links", "time_entries__user"),
             organization=organization,
             number=int(normalized[3:]),
         )
     return get_object_or_404(
         Ticket.objects.select_related(
+            "organization",
             "project",
             "origin_topic",
             "assignee",
-        ).prefetch_related("external_links"),
+        ).prefetch_related("external_links", "time_entries__user"),
         organization=organization,
         uid=reference,
     )
@@ -73,7 +82,17 @@ class TicketListCreateView(APIView):
         membership = get_membership(request.user, workspace_slug)
         tickets = Ticket.objects.filter(
             organization=membership.workspace
-        ).select_related("project", "assignee")
+        ).select_related(
+            "organization",
+            "project",
+            "assignee",
+        ).prefetch_related("time_entries__user")
+        project_filter = request.query_params.get("project")
+        if project_filter:
+            tickets = tickets.filter(
+                models.Q(project__uid=project_filter)
+                | models.Q(project__key__iexact=project_filter)
+            )
         return Response(TicketSummarySerializer(tickets, many=True).data)
 
     def post(self, request, workspace_slug):
@@ -83,14 +102,12 @@ class TicketListCreateView(APIView):
         serializer = TicketCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        project = None
-        if data.get("project_uid"):
-            project = get_object_or_404(
-                Project.objects,
-                uid=data["project_uid"],
-                organization=membership.workspace,
-                is_active=True,
-            )
+        project = get_object_or_404(
+            Project.objects,
+            uid=data["project_uid"],
+            organization=membership.workspace,
+            is_active=True,
+        )
         origin_topic = None
         if data.get("origin_topic_uid"):
             origin_topic = get_object_or_404(
@@ -107,6 +124,8 @@ class TicketListCreateView(APIView):
                 priority=data.get("priority"),
                 project=project,
                 origin_topic=origin_topic,
+                estimated_minutes=data.get("estimated_minutes", 0),
+                due_date=data.get("due_date"),
             )
         except ValueError as error:
             raise ValidationError({"ticket": str(error)}) from error
@@ -136,6 +155,14 @@ class TicketDetailView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         validated_data = dict(serializer.validated_data)
+        if "project_uid" in validated_data:
+            project_uid = validated_data.pop("project_uid")
+            validated_data["project"] = get_object_or_404(
+                Project.objects,
+                uid=project_uid,
+                organization=membership.workspace,
+                is_active=True,
+            )
         if "assignee_uid" in validated_data:
             assignee_uid = validated_data.pop("assignee_uid")
             assignee = None
@@ -154,11 +181,14 @@ class TicketDetailView(APIView):
                 )
                 assignee = assignee_membership.user
             validated_data["assignee"] = assignee
-        update_ticket(
-            ticket=ticket,
-            actor=request.user,
-            validated_data=validated_data,
-        )
+        try:
+            update_ticket(
+                ticket=ticket,
+                actor=request.user,
+                validated_data=validated_data,
+            )
+        except ValueError as error:
+            raise ValidationError({"ticket": str(error)}) from error
         return Response(TicketDetailSerializer(ticket).data)
 
     def delete(self, request, workspace_slug, reference):
@@ -203,3 +233,85 @@ class TicketExternalLinkCreateView(APIView):
             TicketExternalLinkSerializer(link).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class TicketTimerStartView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, workspace_slug, reference):
+        membership = get_membership(request.user, workspace_slug)
+        if membership.role == WorkspaceRole.GUEST:
+            raise PermissionDenied("Guests cannot track Ticket time.")
+        ticket = resolve_ticket(membership.workspace, reference)
+        try:
+            start_ticket_timer(ticket=ticket, user=request.user)
+        except ValueError as error:
+            raise ValidationError({"timer": str(error)}) from error
+        ticket = resolve_ticket(membership.workspace, reference)
+        return Response(TicketSummarySerializer(ticket).data)
+
+
+class ActiveTicketTimerView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        membership = get_membership(request.user, workspace_slug)
+        entry = (
+            TicketTimeEntry.objects.filter(
+                user=request.user,
+                status=TicketTimeEntry.Status.PROGRESSING,
+            )
+            .select_related("ticket__organization")
+            .first()
+        )
+        if not entry:
+            return Response(None)
+        ticket = resolve_ticket(
+            entry.ticket.organization,
+            entry.ticket.reference,
+        )
+        return Response(TicketSummarySerializer(ticket).data)
+
+
+class TicketTimerStopView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, workspace_slug, reference):
+        membership = get_membership(request.user, workspace_slug)
+        if membership.role == WorkspaceRole.GUEST:
+            raise PermissionDenied("Guests cannot track Ticket time.")
+        ticket = resolve_ticket(membership.workspace, reference)
+        entry = get_object_or_404(
+            TicketTimeEntry.objects.select_related("user"),
+            ticket=ticket,
+            status=TicketTimeEntry.Status.PROGRESSING,
+        )
+        if (
+            entry.user_id != request.user.id
+            and membership.role not in TICKET_DELETE_ROLES
+        ):
+            raise PermissionDenied(
+                "Only the timer owner, an Owner, or an Admin can stop it."
+            )
+        stop_ticket_timer(entry=entry)
+        ticket = resolve_ticket(membership.workspace, reference)
+        return Response(TicketSummarySerializer(ticket).data)
+
+
+class TicketTimerHeartbeatView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, workspace_slug, reference):
+        membership = get_membership(request.user, workspace_slug)
+        if membership.role == WorkspaceRole.GUEST:
+            raise PermissionDenied("Guests cannot track Ticket time.")
+        ticket = resolve_ticket(membership.workspace, reference)
+        entry = get_object_or_404(
+            TicketTimeEntry.objects,
+            ticket=ticket,
+            user=request.user,
+            status=TicketTimeEntry.Status.PROGRESSING,
+        )
+        heartbeat_ticket_timer(entry=entry)
+        ticket = resolve_ticket(membership.workspace, reference)
+        return Response(TicketSummarySerializer(ticket).data)

@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 from accounts.models import User
 from organizations.models import Workspace
@@ -28,9 +29,7 @@ class Ticket(BaseModel):
     )
     project = models.ForeignKey(
         Project,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="tickets",
     )
     origin_topic = models.ForeignKey(
@@ -55,6 +54,8 @@ class Ticket(BaseModel):
         null=True,
         blank=True,
     )
+    estimated_minutes = models.PositiveIntegerField(default=0)
+    due_date = models.DateField(null=True, blank=True, db_index=True)
     created_by = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
@@ -108,3 +109,71 @@ class TicketExternalLink(BaseModel):
         on_delete=models.PROTECT,
         related_name="ticket_external_links",
     )
+
+
+class TicketTimeEntry(BaseModel):
+    class Status(models.TextChoices):
+        PROGRESSING = "progressing", "Progressing"
+        COMPLETED = "completed", "Completed"
+
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="time_entries",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="ticket_time_entries",
+    )
+    started_at = models.DateTimeField(default=timezone.now, db_index=True)
+    stopped_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_heartbeat_at = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PROGRESSING,
+        db_index=True,
+    )
+    progress_seconds = models.PositiveBigIntegerField(default=0)
+    duration_seconds = models.PositiveBigIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("ticket",),
+                condition=models.Q(
+                    status="progressing",
+                    deleted_at__isnull=True,
+                ),
+                name="one_active_timer_per_ticket",
+            ),
+            models.UniqueConstraint(
+                fields=("user",),
+                condition=models.Q(
+                    status="progressing",
+                    deleted_at__isnull=True,
+                ),
+                name="one_active_timer_per_user",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(stopped_at__isnull=True)
+                    | models.Q(stopped_at__gte=models.F("started_at"))
+                ),
+                name="ticket_timer_stop_not_before_start",
+            ),
+        ]
+        ordering = ["-started_at"]
+
+    @property
+    def elapsed_seconds(self):
+        if self.status == self.Status.COMPLETED:
+            return self.duration_seconds
+        return max(
+            self.progress_seconds,
+            int((timezone.now() - self.started_at).total_seconds()),
+        )

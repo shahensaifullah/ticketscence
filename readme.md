@@ -8,8 +8,11 @@ idea through conversation. Once the work is clear, they can create one or more
 The application is designed around this workflow:
 
 ```text
-Topic → conversation and investigation → one or more Tickets → board workflow
+Workspace → Project → Topics → one or more Tickets → project-filtered board
 ```
+
+Every Topic and every Ticket belongs to exactly one Project. Tickets are the
+board cards; there is no separate task model to maintain.
 
 ## What the project includes
 
@@ -17,7 +20,12 @@ Topic → conversation and investigation → one or more Tickets → board workf
 - Topics for bugs, features, improvements, questions, feedback, and other ideas
 - Topic conversations with threaded comments, mentions, and attachments
 - Multiple Tickets from one Topic, with an Origin Topic link on each Ticket
-- A board where tickets are assigned and moved through the work process
+- Projects with a lead, members, status, priority, schedule, and description
+- Project overview metrics for open tickets, active members, progress, estimated
+  time remaining, and total tracked time
+- A board where tickets are assigned, moved through the workflow, and filtered
+  by Project
+- Optional time estimates and multiple start/stop work sessions on every ticket
 - Ticket and Topic activity history
 - Optional solution links, ticket links, and source-control links
 - Protected deletion for Topics and Tickets, restricted to owners and admins
@@ -215,6 +223,50 @@ python manage.py backfill_topic_embeddings
 
 # Force regeneration for every Topic
 python manage.py backfill_topic_embeddings --all
+```
+
+## Projects, tickets, and time tracking
+
+Owners and admins can create Projects and select their lead and members. A
+Project belongs to one workspace. A Project is required when creating either a
+Topic or a Ticket. Existing records without a Project are migrated to the
+workspace's `General` Project, but new API requests without `project_uid` are
+rejected.
+
+Creating a Ticket from a Topic supports:
+
+- Project
+- title
+- description
+- priority
+- estimated minutes
+- due date
+
+The board's Project filter accepts a Project UID or key. A Project overview
+links to the same filtered board and displays metrics calculated from its
+tickets and memberships.
+
+Timers start from the Ticket detail page. While one is running, a compact
+bottom-right timer remains visible throughout the authenticated application,
+links back to its Ticket, and provides a Stop button. Starting creates a
+`progressing` time-entry row, records its start time, and moves the Ticket to
+`in_progress`. The browser updates the visible timer every second and sends a
+database heartbeat every 15 seconds. Stopping completes the row with its final
+progress, duration, and end time. Starting again creates another history entry,
+so a separate Pause action is unnecessary. A user can have only one running
+timer at a time, only one timer may run on a Ticket, and completing or closing
+a Ticket stops its active timer automatically.
+
+Useful API routes:
+
+```text
+GET|POST  /api/workspaces/<workspace-slug>/projects/
+GET|PATCH /api/workspaces/<workspace-slug>/projects/<project-key>/
+GET       /api/workspaces/<workspace-slug>/tickets/?project=<project-uid-or-key>
+POST      /api/workspaces/<workspace-slug>/tickets/<ticket-reference>/timer/start/
+POST      /api/workspaces/<workspace-slug>/tickets/<ticket-reference>/timer/stop/
+POST      /api/workspaces/<workspace-slug>/tickets/<ticket-reference>/timer/heartbeat/
+GET       /api/workspaces/<workspace-slug>/tickets/timer/active
 ```
 
 ## Development commands

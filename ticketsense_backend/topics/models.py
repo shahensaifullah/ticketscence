@@ -39,9 +39,7 @@ class Topic(BaseModel):
     )
     project = models.ForeignKey(
         Project,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="topics",
     )
     title = models.CharField(max_length=255)

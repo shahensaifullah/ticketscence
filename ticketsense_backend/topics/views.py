@@ -89,8 +89,6 @@ def get_topic(organization, topic_uid):
 
 
 def resolve_project(organization, project_uid):
-    if not project_uid:
-        return None
     return get_object_or_404(
         Project.objects,
         uid=project_uid,
@@ -123,7 +121,7 @@ class TopicListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         project = resolve_project(
             membership.workspace,
-            serializer.validated_data.pop("project_uid", None),
+            serializer.validated_data.pop("project_uid"),
         )
         topic = serializer.save(
             organization=membership.workspace,
@@ -405,10 +403,8 @@ class TopicTicketCreateView(APIView):
         data = serializer.validated_data
         project = resolve_project(
             membership.workspace,
-            data.get("project_uid"),
+            data["project_uid"],
         )
-        if project is None:
-            project = topic.project
         try:
             ticket = create_ticket(
                 organization=membership.workspace,
@@ -418,6 +414,7 @@ class TopicTicketCreateView(APIView):
                 priority=data["priority"],
                 project=project,
                 origin_topic=topic,
+                estimated_minutes=data.get("estimated_minutes", 0),
             )
         except ValueError as error:
             raise ValidationError({"ticket": str(error)}) from error

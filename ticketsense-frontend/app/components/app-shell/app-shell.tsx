@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ensureSession } from "@/lib/api";
 import { WorkspaceProvider } from "../workspace-provider";
+import { GlobalTimerWidget } from "../tickets/global-timer-widget";
 import { AppHeader } from "./app-header";
 import { AppSidebar } from "./app-sidebar";
 
@@ -66,6 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {children}
           </div>
         </main>
+        <GlobalTimerWidget />
       </div>
     </WorkspaceProvider>
   );

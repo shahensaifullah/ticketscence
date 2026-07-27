@@ -10,7 +10,6 @@ import {
   LogOut,
   Menu,
   Moon,
-  Plus,
   Search,
   Settings,
   Sun,
@@ -143,14 +142,6 @@ export function AppHeader({ onOpenMobile }: AppHeaderProps) {
             <Command aria-hidden="true" size={10} /> K
           </span>
         </button>
-
-        <Link
-          className="hidden h-10 items-center gap-2 rounded-lg bg-[var(--primary-container)] px-4 text-sm font-semibold text-[var(--on-primary-container)] transition hover:brightness-110 lg:flex"
-          href="/tickets/new"
-        >
-          <Plus aria-hidden="true" size={17} />
-          Create ticket
-        </Link>
 
         <button
           aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}

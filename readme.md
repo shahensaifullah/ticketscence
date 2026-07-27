@@ -1,93 +1,151 @@
 # TicketSense
 
-TicketSense is an AI-assisted, organization-based issue and work tracking
-application. Teams begin with a **Topic** to understand a problem, request, or
-idea through conversation. Once the work is clear, they can create one or more
-**Tickets** from that Topic and manage those tickets as cards on the board.
+TicketSense is an AI-assisted issue and work-tracking application for internal
+company teams. It helps a team discuss a problem or idea before turning it into
+actionable work.
 
-The application is designed around this workflow:
+The core workflow is:
 
 ```text
-Workspace → Project → Topics → one or more Tickets → project-filtered board
+Workspace → Project → Topic → one or more Tickets → completion
 ```
 
-Every Topic and every Ticket belongs to exactly one Project. Tickets are the
-board cards; there is no separate task model to maintain.
+A **Topic** is the collaborative starting point for a bug, feature request,
+improvement, technical question, customer feedback, or another matter that
+needs discussion. Team members can investigate it through a conversation,
+threaded replies, mentions, and attachments.
 
-## What the project includes
+Once the work is understood, the team can create zero, one, or many **Tickets**
+from the Topic. Tickets are also the cards shown in the Tickets board, so the
+application does not maintain a separate board-card or task model.
 
-- Organization workspaces with owner, admin, member, and guest access
-- Topics for bugs, features, improvements, questions, feedback, and other ideas
-- Topic conversations with threaded comments, mentions, and attachments
-- Multiple Tickets from one Topic, with an Origin Topic link on each Ticket
-- Projects with a lead, members, status, priority, schedule, and description
-- Project overview metrics for open tickets, active members, progress, estimated
-  time remaining, and total tracked time
-- A board where tickets are assigned, moved through the workflow, and filtered
-  by Project
-- Optional time estimates and multiple start/stop work sessions on every ticket
-- Ticket and Topic activity history
-- Optional solution links, ticket links, and source-control links
-- Protected deletion for Topics and Tickets, restricted to owners and admins
-- AI-assisted duplicate Topic discovery
+## Main features
 
-## AI similarity matching
+- Workspaces with Owner, Admin, Member, and Guest roles
+- Projects with a key, lead, members, status, priority, dates, and description
+- A required Project relationship for every Topic and Ticket
+- Topics for discussion, threaded comments, mentions, attachments, participants,
+  solutions, related tickets, and activity history
+- One Topic to many Tickets, with an optional Origin Topic on each Ticket
+- Ticket board grouped by workflow status and filterable by Project
+- Ticket assignment, priority, estimate, due date, and external development links
+- GitHub, GitHub pull request, GitLab, Bitbucket, Jira, Linear, and custom links
+- Multiple time entries per Ticket with one active timer per user
+- A persistent website-wide timer with live progress and a Stop action
+- Project summaries for open Tickets, active members, estimated work, and tracked
+  time
+- Soft deletion for business records and confirmation-based Topic/Ticket deletion
+- Owner/Admin protection for destructive actions
+- Local AI-powered duplicate Topic suggestions without a paid AI API
 
-TicketSense does not require a paid AI API. It uses the local
-`BAAI/bge-small-en-v1.5` sentence-embedding model through FastEmbed.
+## How the AI feature works
 
-When a Topic is created or its title or description changes:
+When a user enters a Topic title and description, TicketSense can suggest
+existing Topics from the same Workspace that have a similar meaning. Selecting
+a suggestion opens that Topic.
 
-1. Django commits the Topic to PostgreSQL.
-2. A Celery task is sent through Redis.
-3. The worker generates a 384-dimensional semantic embedding.
-4. The vector is stored in PostgreSQL using pgvector.
-5. Similar Topics are found with cosine-distance search.
+The feature uses the free local `BAAI/bge-small-en-v1.5` embedding model through
+FastEmbed:
 
-This compares meaning rather than only matching identical words. Embeddings are
-not regenerated when unrelated Topic fields change.
+1. A Topic is created or its title/description is changed.
+2. Django commits the Topic to PostgreSQL.
+3. Django queues an embedding task through Redis.
+4. A Celery worker generates a 384-dimensional semantic vector.
+5. The vector and model metadata are stored in PostgreSQL with pgvector.
+6. Similar Topics are ranked using cosine distance and the pgvector HNSW index.
 
-## Technology
+This is semantic matching rather than word-for-word searching. Normal Topic
+creation is not blocked while the background worker generates the vector.
 
-| Area | Technology |
+## Technology stack
+
+| Layer | Technology |
 | --- | --- |
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS |
-| Backend | Django 6, Django REST Framework, JWT authentication |
-| Database | PostgreSQL 16/17 with pgvector |
-| Background jobs | Celery and Redis |
-| Local AI | FastEmbed and BGE Small English v1.5 |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
+| API | Python 3.12, Django 6, Django REST Framework |
+| Authentication | JWT with Simple JWT and refresh-token rotation |
+| Database | PostgreSQL 16 with pgvector |
+| Semantic AI | FastEmbed with BGE Small English v1.5 |
+| Background processing | Celery 5 |
+| Queue and cache | Redis 8 and django-redis |
+| API documentation | drf-spectacular / OpenAPI |
+| Containers | Docker and Docker Compose |
 
-## Run everything with Docker
+## Repository structure
 
-This is the recommended setup. Docker starts the frontend, backend, database,
-Redis, and embedding worker together.
+```text
+TicketSense/
+├── compose.yaml
+├── .env.example
+├── ticketsense-frontend/       # Next.js application
+└── ticketsense_backend/        # Django API and Celery application
+    ├── accounts/
+    ├── organizations/
+    ├── projects/
+    ├── topics/
+    └── tickets/
+```
+
+## Quick start with Docker
+
+Docker is the recommended way to run the project. It starts PostgreSQL with
+pgvector, Redis, Django, Celery, and Next.js together.
 
 ### Requirements
 
-Install:
+Install one of the following:
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) on macOS or
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) for macOS or
   Windows
-- Docker Engine with the Compose plugin on Linux
+- Docker Engine with the Docker Compose plugin for Linux
 
-No local Python, Node.js, PostgreSQL, Redis, pgvector, or AI model installation
-is required.
+You do not need to install Python, Node.js, PostgreSQL, pgvector, or Redis
+separately when using Docker.
 
-### Start the application
+### 1. Get the project
 
-From the repository root:
+```bash
+git clone <your-repository-url>
+cd TicketSense
+```
+
+If you already have the repository, open a terminal in its root directory.
+
+### 2. Create the environment file
+
+```bash
+cp .env.example .env
+```
+
+For local Docker development, the provided values can be used after replacing
+the secret and database password:
+
+```dotenv
+DJANGO_SECRET_KEY=replace-with-a-long-random-secret
+DJANGO_DEBUG=True
+POSTGRES_DB=ticketsense
+POSTGRES_USER=ticketsense
+POSTGRES_PASSWORD=replace-with-a-secure-password
+```
+
+Do not commit `.env`. If a value contains a literal `$`, enclose that value in
+single quotes so Docker Compose does not treat it as variable interpolation.
+
+### 3. Build and start everything
 
 ```bash
 docker compose up --build
 ```
 
-Compose uses safe development defaults. If a root `.env` exists, its database
-and Django values override those defaults. Values containing a literal `$` must
-be enclosed in single quotes in `.env` so Docker Compose does not interpolate
-them.
+To run it in the background:
 
-The first build takes longer because it installs the dependencies and downloads
-the local embedding model. Later starts reuse the Docker build cache.
+```bash
+docker compose up --detach --build
+```
+
+The first build can take several minutes because the backend image downloads
+the local embedding model. Later builds reuse Docker's cache. The backend
+container automatically applies Django migrations before starting.
 
 Open:
 
@@ -95,47 +153,72 @@ Open:
 - Backend API: http://localhost:8000
 - Django admin: http://localhost:8000/admin/
 
-The API container applies Django migrations automatically before it starts.
+### 4. Create an account
 
-Run the optional demo-data command in another terminal:
+Register through the frontend, or create a Django administrator:
+
+```bash
+docker compose exec backend python manage.py createsuperuser
+```
+
+An optional development-data command is also available:
 
 ```bash
 docker compose exec backend python manage.py create_users
 ```
 
-The development seed command currently uses `admin@admin.com` with password
-`123456`. Never use these credentials in a deployed environment.
+The seed command uses development-only credentials. Do not use seeded
+credentials in a public deployment.
 
-### Stop or reset Docker
+### Docker management commands
 
-Stop the application while preserving database and uploaded-file data:
+Check container status:
+
+```bash
+docker compose ps
+```
+
+View logs:
+
+```bash
+docker compose logs --follow backend
+docker compose logs --follow worker
+docker compose logs --follow frontend
+```
+
+Stop the application while preserving its data:
 
 ```bash
 docker compose down
 ```
 
-Delete containers and all Docker-managed project data:
+Delete containers and all Docker-managed database, Redis, and uploaded-file
+data:
 
 ```bash
 docker compose down --volumes
 ```
 
-The second command permanently removes the Docker database and media volumes.
+`docker compose down --volumes` is destructive and cannot recover the removed
+Docker volumes.
 
-## Run locally without Docker
+## Run without Docker
 
-### 1. Install system dependencies
+Use this setup when developing the frontend and backend directly on your
+computer.
+
+### Requirements
 
 Install:
 
-- Python 3.12+
-- Node.js 20+
+- Python 3.12 or newer
+- Node.js 20 or newer
 - Yarn 1.x
-- PostgreSQL 16 or 17
-- pgvector for the same PostgreSQL installation
+- PostgreSQL 16 or newer
+- pgvector built for the selected PostgreSQL installation
 - Redis
 
-On macOS with Homebrew:
+On macOS, the main services can be installed with Homebrew:
 
 ```bash
 brew install postgresql@17 pgvector redis
@@ -143,7 +226,28 @@ brew services start postgresql@17
 brew services start redis
 ```
 
-### 2. Configure the environment
+Package names can differ on Linux. Confirm that pgvector is installed for the
+same PostgreSQL server used by Django.
+
+### 1. Configure PostgreSQL
+
+Open PostgreSQL as an administrator:
+
+```bash
+psql postgres
+```
+
+Then create the local user, database, and vector extension:
+
+```sql
+CREATE USER ticketsense WITH PASSWORD 'replace-with-a-secure-password';
+CREATE DATABASE ticketsense OWNER ticketsense;
+\connect ticketsense
+CREATE EXTENSION IF NOT EXISTS vector;
+\quit
+```
+
+### 2. Configure environment variables
 
 From the repository root:
 
@@ -151,27 +255,18 @@ From the repository root:
 cp .env.example .env
 ```
 
-Update at least these values in `.env`:
+Make sure the local service addresses are configured:
 
 ```dotenv
-DJANGO_SECRET_KEY=replace-with-a-long-random-secret
-POSTGRES_DB=ticketsense
-POSTGRES_USER=ticketsense
-POSTGRES_PASSWORD=replace-with-a-secure-password
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/1
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Create the PostgreSQL role and database using your preferred PostgreSQL
-administration tool. The Django migration creates the `vector` extension when
-the configured database user has permission. Otherwise, connect as a PostgreSQL
-administrator and run:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-```
-
-### 3. Start the backend
+### 3. Start the Django API
 
 ```bash
 cd ticketsense_backend
@@ -183,11 +278,17 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-The backend is available at http://localhost:8000.
+On Windows PowerShell, activate the environment with:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+The backend will run at http://localhost:8000.
 
 ### 4. Start the Celery worker
 
-Keep the backend running and open another terminal:
+Keep Django running and open a second terminal:
 
 ```bash
 cd ticketsense_backend
@@ -195,12 +296,13 @@ source .venv/bin/activate
 celery -A ticketsense_backend worker --pool=solo --loglevel=info
 ```
 
-`--pool=solo` is appropriate for local development and prevents several worker
-processes from loading separate copies of the embedding model.
+Use the equivalent `.venv` activation command on Windows. The `solo` pool is
+recommended for local development because it avoids loading multiple copies of
+the embedding model.
 
-### 5. Start the frontend
+### 5. Start the Next.js frontend
 
-Open another terminal:
+Open a third terminal:
 
 ```bash
 cd ticketsense-frontend
@@ -210,66 +312,90 @@ yarn dev
 
 Open http://localhost:3000.
 
-## Embedding maintenance
+## Application rules
 
-New and edited Topics are embedded automatically by Celery. A backfill is only
-needed for older Topics, missing vectors, or after changing the embedding model.
+### Workspaces and roles
+
+- The user who creates a Workspace becomes its Owner.
+- Each Workspace has one active Owner.
+- Roles are intentionally universal: Owner, Admin, Member, and Guest.
+- Specific responsibilities are assigned through Projects, Ticket assignment,
+  and application permissions rather than job-title roles.
+- Owner and Admin users control protected management and deletion actions.
+
+### Projects, Topics, and Tickets
+
+- A Project belongs to one Workspace.
+- A Topic cannot be created without a Project.
+- A Ticket cannot be created without a Project.
+- A Topic can produce any number of Tickets.
+- A Ticket has zero or one Origin Topic.
+- Deleting a Topic does not delete its related Tickets.
+- Relationships use database foreign keys, never JSON or comma-separated IDs.
+- Ticket estimates and due dates belong to Tickets, not Projects.
+
+### Ticket board and timers
+
+- Tickets are the cards displayed in the Tickets board.
+- Cards can be filtered by Project and moved through Backlog, Open, In Progress,
+  In Review, Completed, and Closed.
+- A user can run only one Ticket timer at a time.
+- A Ticket can have only one active timer, but it retains multiple completed
+  time-entry records.
+- Starting a timer creates a progressing entry and moves the Ticket to
+  `in_progress`.
+- The global bottom-right timer remains visible while navigating the application.
+- The frontend displays time every second and periodically sends a heartbeat to
+  persist progress.
+- Stopping the timer records its end time and final duration.
+- Completing or closing a Ticket stops its active timer automatically.
+
+## Topic embedding maintenance
+
+New and edited Topics are embedded automatically by Celery. Do **not** run a
+backfill for every new Topic.
+
+Generate only missing or outdated embeddings:
 
 ```bash
-cd ticketsense_backend
-
-# Generate missing or outdated embeddings
-python manage.py backfill_topic_embeddings
-
-# Force regeneration for every Topic
-python manage.py backfill_topic_embeddings --all
+docker compose exec backend python manage.py backfill_topic_embeddings
 ```
 
-## Projects, tickets, and time tracking
+Force regeneration for every Topic after changing the model or embedding
+dimensions:
 
-Owners and admins can create Projects and select their lead and members. A
-Project belongs to one workspace. A Project is required when creating either a
-Topic or a Ticket. Existing records without a Project are migrated to the
-workspace's `General` Project, but new API requests without `project_uid` are
-rejected.
-
-Creating a Ticket from a Topic supports:
-
-- Project
-- title
-- description
-- priority
-- estimated minutes
-- due date
-
-The board's Project filter accepts a Project UID or key. A Project overview
-links to the same filtered board and displays metrics calculated from its
-tickets and memberships.
-
-Timers start from the Ticket detail page. While one is running, a compact
-bottom-right timer remains visible throughout the authenticated application,
-links back to its Ticket, and provides a Stop button. Starting creates a
-`progressing` time-entry row, records its start time, and moves the Ticket to
-`in_progress`. The browser updates the visible timer every second and sends a
-database heartbeat every 15 seconds. Stopping completes the row with its final
-progress, duration, and end time. Starting again creates another history entry,
-so a separate Pause action is unnecessary. A user can have only one running
-timer at a time, only one timer may run on a Ticket, and completing or closing
-a Ticket stops its active timer automatically.
-
-Useful API routes:
-
-```text
-GET|POST  /api/workspaces/<workspace-slug>/projects/
-GET|PATCH /api/workspaces/<workspace-slug>/projects/<project-key>/
-GET       /api/workspaces/<workspace-slug>/tickets/?project=<project-uid-or-key>
-POST      /api/workspaces/<workspace-slug>/tickets/<ticket-reference>/timer/start/
-POST      /api/workspaces/<workspace-slug>/tickets/<ticket-reference>/timer/stop/
-POST      /api/workspaces/<workspace-slug>/tickets/<ticket-reference>/timer/heartbeat/
-GET       /api/workspaces/<workspace-slug>/tickets/timer/active
+```bash
+docker compose exec backend python manage.py backfill_topic_embeddings --all
 ```
 
-## Development commands
+Without Docker, run the same management commands from `ticketsense_backend`
+with the Python virtual environment activated.
+
+## Important environment variables
+
+All supported development values are listed in [`.env.example`](.env.example).
+
+| Variable | Purpose |
+| --- | --- |
+| `DJANGO_SECRET_KEY` | Django cryptographic secret |
+| `DJANGO_DEBUG` | Enables or disables Django debug mode |
+| `CORS_ALLOWED_ORIGINS` | Frontend origins allowed to call the API |
+| `CSRF_TRUSTED_ORIGINS` | Trusted origins for CSRF-protected requests |
+| `POSTGRES_*` | PostgreSQL connection settings |
+| `CELERY_BROKER_URL` | Redis queue used by Celery |
+| `CELERY_RESULT_BACKEND` | Redis storage for Celery results |
+| `TOPIC_EMBEDDING_ENABLED` | Enables asynchronous Topic embeddings |
+| `TOPIC_EMBEDDING_MODEL` | FastEmbed model used for semantic matching |
+| `TOPIC_EMBEDDING_THREADS` | CPU threads used during local inference |
+| `TOPIC_SIMILARITY_THRESHOLD` | Minimum cosine-similarity score shown |
+| `NEXT_PUBLIC_API_BASE_URL` | Django URL available to the user's browser |
+| `NEXT_PUBLIC_SITE_URL` | Public frontend URL |
+
+Restart or rebuild the affected service after changing environment variables.
+Next.js public variables are included at build time, so rebuild the frontend
+when they change.
+
+## Development and verification
 
 Backend checks and tests:
 
@@ -279,7 +405,7 @@ python manage.py check
 python manage.py test
 ```
 
-Frontend checks:
+Frontend lint and production build:
 
 ```bash
 cd ticketsense-frontend
@@ -287,51 +413,66 @@ yarn lint
 yarn build
 ```
 
-Docker logs:
+With Docker:
 
 ```bash
-docker compose logs -f backend
-docker compose logs -f worker
-docker compose logs -f frontend
+docker compose exec backend python manage.py check
+docker compose exec backend python manage.py test
+docker compose exec frontend yarn lint
 ```
-
-## Environment variables
-
-The documented defaults are in [`.env.example`](.env.example). Important
-variables include:
-
-- `POSTGRES_*`: PostgreSQL connection
-- `CELERY_BROKER_URL`: Redis queue used by Celery
-- `CELERY_RESULT_BACKEND`: Celery result storage
-- `TOPIC_EMBEDDING_MODEL`: local semantic model
-- `TOPIC_SIMILARITY_THRESHOLD`: minimum similarity shown to users
-- `NEXT_PUBLIC_API_BASE_URL`: browser-accessible Django API URL
-- `NEXT_PUBLIC_SITE_URL`: browser-accessible frontend URL
-
-Do not commit `.env`; it may contain credentials.
 
 ## Common problems
 
 ### `type "vector" does not exist`
 
-The PostgreSQL server does not have pgvector installed, or the extension was not
-created in the selected database. Install pgvector and run:
+The selected PostgreSQL server does not have the pgvector extension installed
+or enabled:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-The Docker setup already uses a pgvector-enabled PostgreSQL image.
+The Docker configuration already uses the
+`pgvector/pgvector:0.8.2-pg16-bookworm` image.
 
-### Topics are saved but no embedding appears
+### `django.contrib.postgres` is required for `HnswIndex`
 
-Confirm Redis and the Celery worker are running:
+`django.contrib.postgres` must remain in `INSTALLED_APPS`. It is already enabled
+in the repository settings.
+
+### A Topic is saved but its embedding stays empty
+
+Confirm that Redis and the Celery worker are running:
 
 ```bash
 docker compose ps
-docker compose logs -f worker
+docker compose logs --follow worker
 ```
 
-Saving a Topic is intentionally not blocked if the queue is temporarily
-unavailable. Once the worker is available, use the normal backfill command to
-repair any missing embeddings.
+After restoring the worker, run the normal backfill command to enqueue missing
+embeddings.
+
+### Browser sends `OPTIONS`, but the API request does not continue
+
+Confirm that the exact frontend address—including scheme and port—is present in
+both `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS`. When using Docker
+locally, access the site consistently through one of `localhost`, `127.0.0.1`,
+or `0.0.0.0`, rather than mixing origins.
+
+### Docker Compose warns that a variable is not set
+
+A secret in `.env` probably contains `$`. Put the entire value in single quotes
+or escape the dollar signs before running Compose again.
+
+## Deployment note
+
+The included Compose configuration is optimized for local development and a
+portfolio demonstration. Before exposing it publicly:
+
+- set `DJANGO_DEBUG=False`;
+- use strong, unique secrets;
+- restrict Django allowed hosts and CORS/CSRF origins;
+- serve Django through a production WSGI/ASGI server instead of `runserver`;
+- put the application behind HTTPS with Caddy or Nginx;
+- back up the PostgreSQL and media volumes;
+- restrict PostgreSQL and Redis to the private container network.

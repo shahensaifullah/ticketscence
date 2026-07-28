@@ -1,7 +1,12 @@
+from datetime import timedelta
+
 from django.db import models
+from django.db.models import F, Max
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,6 +16,7 @@ from organizations.models import WorkspaceMember
 from projects.models import Project
 from tickets.models import Ticket, TicketExternalLink, TicketTimeEntry
 from tickets.serializers import (
+    AssignedTicketSerializer,
     TicketCreateSerializer,
     TicketDeleteSerializer,
     TicketDetailSerializer,
@@ -132,6 +138,73 @@ class TicketListCreateView(APIView):
         return Response(
             TicketDetailSerializer(ticket).data,
             status=status.HTTP_201_CREATED,
+        )
+
+
+class AssignedTicketPagination(PageNumberPagination):
+    page_size = 10
+
+
+class AssignedTicketListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, workspace_slug):
+        membership = get_membership(request.user, workspace_slug)
+        terminal_statuses = (
+            Ticket.Status.COMPLETED,
+            Ticket.Status.CLOSED,
+        )
+        assigned_tickets = Ticket.objects.filter(
+            organization=membership.workspace,
+            assignee=request.user,
+        )
+        today = timezone.localdate()
+        metrics = {
+            "assigned_count": assigned_tickets.count(),
+            "due_next_seven_days_count": assigned_tickets.exclude(
+                status__in=terminal_statuses,
+            ).filter(
+                due_date__range=(today, today + timedelta(days=6)),
+            ).count(),
+            "completed_count": assigned_tickets.filter(
+                status__in=terminal_statuses,
+            ).count(),
+        }
+        ordered_tickets = (
+            assigned_tickets.select_related(
+                "organization",
+                "project",
+                "assignee",
+            )
+            .prefetch_related("time_entries__user")
+            .annotate(
+                latest_timer_at=Max("time_entries__started_at"),
+            )
+            .order_by(
+                F("latest_timer_at").desc(nulls_last=True),
+                "-updated_at",
+            )
+        )
+        paginator = AssignedTicketPagination()
+        page = paginator.paginate_queryset(
+            ordered_tickets,
+            request,
+            view=self,
+        )
+        return Response(
+            {
+                "count": paginator.page.paginator.count,
+                "next": paginator.get_next_link(),
+                "previous": paginator.get_previous_link(),
+                "page": paginator.page.number,
+                "page_size": paginator.page_size,
+                "total_pages": paginator.page.paginator.num_pages,
+                "metrics": metrics,
+                "results": AssignedTicketSerializer(
+                    page,
+                    many=True,
+                ).data,
+            }
         )
 
 

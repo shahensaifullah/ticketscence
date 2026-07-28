@@ -337,6 +337,25 @@ export type BoardTicket = {
   created_at: string;
 };
 
+export type AssignedTicket = BoardTicket & {
+  latest_timer_at: string | null;
+};
+
+export type AssignedTicketPage = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  metrics: {
+    assigned_count: number;
+    due_next_seven_days_count: number;
+    completed_count: number;
+  };
+  results: AssignedTicket[];
+};
+
 export type TopicAttachment = {
   uid: string;
   original_name: string;
@@ -699,6 +718,17 @@ export async function getBoardTickets(
   const response = await api.get<BoardTicket[]>(
     `/api/workspaces/${encodeURIComponent(slug)}/tickets/`,
     { params: project ? { project } : undefined },
+  );
+  return response.data;
+}
+
+export async function getAssignedTickets(
+  slug: string,
+  page = 1,
+) {
+  const response = await api.get<AssignedTicketPage>(
+    `/api/workspaces/${encodeURIComponent(slug)}/tickets/assigned`,
+    { params: { page } },
   );
   return response.data;
 }

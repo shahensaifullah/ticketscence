@@ -121,6 +121,18 @@ class TicketSummarySerializer(serializers.ModelSerializer):
         return TicketTimeEntrySerializer(entry).data
 
 
+class AssignedTicketSerializer(TicketSummarySerializer):
+    latest_timer_at = serializers.DateTimeField(
+        read_only=True,
+        allow_null=True,
+    )
+
+    class Meta(TicketSummarySerializer.Meta):
+        fields = TicketSummarySerializer.Meta.fields + (
+            "latest_timer_at",
+        )
+
+
 class TicketDetailSerializer(TicketSummarySerializer):
     description = serializers.CharField(read_only=True)
     origin_topic = serializers.SerializerMethodField()

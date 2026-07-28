@@ -236,6 +236,95 @@ class ProjectTimerApiTests(APITestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["project_uid"], str(project.uid))
 
+    def test_assigned_work_is_paginated_and_ordered_by_latest_timer(self):
+        project = self.create_project()
+        tickets = []
+        for index in range(12):
+            ticket = create_ticket(
+                organization=self.workspace,
+                project=project,
+                created_by=self.owner,
+                title=f"Assigned ticket {index + 1}",
+                description="Assigned work",
+                due_date=(
+                    timezone.localdate() + timedelta(days=2)
+                    if index == 0
+                    else None
+                ),
+            )
+            ticket.assignee = self.member
+            if index == 11:
+                ticket.status = ticket.Status.COMPLETED
+            ticket.save()
+            tickets.append(ticket)
+        unassigned = create_ticket(
+            organization=self.workspace,
+            project=project,
+            created_by=self.owner,
+            title="Not assigned to this user",
+            description="Must not appear",
+        )
+        newer_timer_at = timezone.now() - timedelta(hours=1)
+        older_timer_at = timezone.now() - timedelta(days=1)
+        TicketTimeEntry.objects.create(
+            ticket=tickets[1],
+            user=self.member,
+            started_at=older_timer_at,
+            stopped_at=older_timer_at + timedelta(minutes=15),
+            last_heartbeat_at=older_timer_at + timedelta(minutes=15),
+            status=TicketTimeEntry.Status.COMPLETED,
+            progress_seconds=900,
+            duration_seconds=900,
+        )
+        TicketTimeEntry.objects.create(
+            ticket=tickets[3],
+            user=self.member,
+            started_at=newer_timer_at,
+            stopped_at=newer_timer_at + timedelta(minutes=15),
+            last_heartbeat_at=newer_timer_at + timedelta(minutes=15),
+            status=TicketTimeEntry.Status.COMPLETED,
+            progress_seconds=900,
+            duration_seconds=900,
+        )
+        self.authenticate(self.member)
+        url = (
+            f"/api/workspaces/{self.workspace.slug}/tickets/assigned"
+        )
+
+        first_page = self.client.get(url)
+        second_page = self.client.get(f"{url}?page=2")
+
+        self.assertEqual(first_page.status_code, status.HTTP_200_OK)
+        self.assertEqual(first_page.data["count"], 12)
+        self.assertEqual(first_page.data["page_size"], 10)
+        self.assertEqual(first_page.data["total_pages"], 2)
+        self.assertEqual(len(first_page.data["results"]), 10)
+        self.assertEqual(
+            first_page.data["results"][0]["reference"],
+            tickets[3].reference,
+        )
+        self.assertEqual(
+            first_page.data["results"][1]["reference"],
+            tickets[1].reference,
+        )
+        self.assertNotIn(
+            unassigned.reference,
+            {
+                ticket["reference"]
+                for ticket in first_page.data["results"]
+            },
+        )
+        self.assertEqual(
+            first_page.data["metrics"],
+            {
+                "assigned_count": 12,
+                "due_next_seven_days_count": 1,
+                "completed_count": 1,
+            },
+        )
+        self.assertEqual(second_page.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(second_page.data["results"]), 2)
+
     def test_board_card_cannot_be_created_without_project(self):
         self.authenticate(self.member)
 

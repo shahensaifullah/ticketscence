@@ -6,6 +6,11 @@ from tickets import views
 urlpatterns = [
     path("", views.TicketListCreateView.as_view(), name="ticket_list"),
     path(
+        "assigned",
+        views.AssignedTicketListView.as_view(),
+        name="assigned_ticket_list",
+    ),
+    path(
         "timer/active",
         views.ActiveTicketTimerView.as_view(),
         name="active_ticket_timer",

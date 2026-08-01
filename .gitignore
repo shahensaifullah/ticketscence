@@ -37,3 +37,6 @@ ticketsense-frontend/agent.md
 
 # Logs
 *.log
+
+# Local demo recordings (link to externally hosted videos from the README)
+*.mp4

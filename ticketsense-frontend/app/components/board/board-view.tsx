@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Plus,
   Search,
   UserRound,
 } from "lucide-react";
@@ -62,6 +64,8 @@ export function BoardView() {
   const [query, setQuery] = useState("");
   const [savingReference, setSavingReference] = useState<string>();
   const [error, setError] = useState<string>();
+  const canCreateTicket =
+    selectedWorkspace && selectedWorkspace.role !== "guest";
 
   useEffect(() => {
     if (!selectedWorkspace) return;
@@ -152,6 +156,17 @@ export function BoardView() {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 sm:p-6 lg:p-8">
       <div className="mb-5">
         <PageHeader
+          actions={
+            canCreateTicket ? (
+              <Link
+                className="inline-flex items-center gap-2 rounded-lg bg-[var(--primary-container)] px-4 py-2.5 text-xs font-semibold text-[var(--on-primary-container)] hover:bg-[var(--primary-hover)]"
+                href="/tickets/new"
+              >
+                <Plus aria-hidden="true" size={15} />
+                New Ticket
+              </Link>
+            ) : undefined
+          }
           description="Every card is a Ticket. Move work through the flow and assign a teammate directly on the card."
           eyebrow={selectedWorkspace?.name ?? "Workspace"}
           title="Tickets"

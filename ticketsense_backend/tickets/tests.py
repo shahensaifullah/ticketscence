@@ -84,6 +84,25 @@ class TopicTicketApiTests(APITestCase):
             "project_uid": str(self.project.uid),
         }
 
+    def test_member_creates_project_ticket_without_topic(self):
+        self.authenticate(self.member)
+        due_date = "2026-08-15"
+
+        response = self.client.post(
+            f"/api/workspaces/{self.organization.slug}/tickets/",
+            {
+                **self.ticket_payload("Prepare checkout release notes"),
+                "due_date": due_date,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        ticket = Ticket.objects.get(uid=response.data["uid"])
+        self.assertEqual(ticket.project, self.project)
+        self.assertIsNone(ticket.origin_topic)
+        self.assertEqual(ticket.due_date.isoformat(), due_date)
+
     def test_member_can_comment_reply_and_mention_organization_member(self):
         topic = self.create_topic()
         comment_url = f"{self.topics_url()}{topic.uid}/comments"

@@ -1,5 +1,7 @@
 # TicketSense
 
+[▶ Watch the TicketSense project demo video](https://drive.google.com/file/d/12gk1uwCkuYwUNFULUM_1oIJPYFVQvU4Z/view?usp=sharing)
+
 TicketSense is an AI-assisted issue and work-tracking application for internal
 company teams. It helps a team discuss a problem or idea before turning it into
 actionable work.
@@ -206,7 +208,35 @@ Register through the frontend, or create a Django administrator:
 docker compose exec backend python manage.py createsuperuser
 ```
 
-An optional development-data command is also available:
+Two optional development-data commands are also available. For a complete
+walkthrough dataset, run:
+
+```bash
+docker compose exec backend python manage.py create_demo_data
+```
+
+This creates an idempotent **Project → Topics → Tickets → progress** story in a
+`TicketSense Demo` Workspace. Sign in with:
+
+```text
+Email: owner@demo.ticketsense.local
+Password: Demo123!
+```
+
+Use `Customer Portal Refresh (PORTAL)` for a demonstration:
+
+1. Open **Projects** to show its members, dates, open work, estimates, and
+   tracked-time summary.
+2. Open **Topics** to show an idea still open, a bug under review with a
+   threaded discussion and mention, a proposal converted into five Tickets,
+   and a resolved bug with its linked solution.
+3. Open **Board** and filter by `PORTAL`. The cards cover Backlog, Open, In
+   Progress, In Review, Completed, and Closed.
+4. Open **My work** or the in-progress Ticket. The demo owner has a running
+   timer, while completed time entries make the Project progress measurable.
+
+The command can be run again safely; it updates the demo records instead of
+duplicating them. A smaller legacy user-only seed is also available:
 
 ```bash
 docker compose exec backend python manage.py create_users

@@ -1,5 +1,4 @@
 import {
-  BarChart3,
   Bell,
   Bot,
   Columns3,
@@ -36,7 +35,6 @@ export const primaryNavigation: NavigationItem[] = [
   },
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "AI Assistant", href: "/assistant", icon: Bot },
-  { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Team", href: "/team", icon: Users },
 ];
 

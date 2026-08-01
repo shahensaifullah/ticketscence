@@ -175,6 +175,7 @@ class TicketCreateSerializer(serializers.Serializer):
         min_value=0,
         max_value=525600,
     )
+    due_date = serializers.DateField(required=False, allow_null=True)
 
 
 class TicketUpdateSerializer(serializers.ModelSerializer):
